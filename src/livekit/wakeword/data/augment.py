@@ -76,7 +76,11 @@ class AudioAugmentor:
                 ),
                 BandStopFilter(p=0.25),
                 AddColoredNoise(p=0.25),
-                Gain(max_gain_in_db=0.0, p=1.0),
+                Gain(
+                    min_gain_in_db=-6.0,
+                    max_gain_in_db=6.0,
+                    p=0.5,
+                ),
             ]
             if self.background_files:
                 # Collect all unique parent directories containing background audio
@@ -85,7 +89,7 @@ class AudioAugmentor:
                     3,
                     AddBackgroundNoise(
                         background_paths=bg_dirs,
-                        min_snr_in_db=-10.0,
+                        min_snr_in_db=0.0,
                         max_snr_in_db=15.0,
                         sample_rate=self.sample_rate,
                         p=0.75,
@@ -220,8 +224,10 @@ def _augment_directory(
     from tqdm import tqdm
 
     target_length = int(target_duration_s * sample_rate)
-    # Only read original clips (no _r<N> suffix) to avoid compounding
-    wav_files = sorted(p for p in clip_dir.glob("*.wav") if "_r" not in p.stem.split("_")[-1])
+    # Only read original clips (clip_000000.wav) — exclude augmented variants (clip_000000_r1.wav)
+    import re
+    _orig_re = re.compile(r"^clip_\d{6}\.wav$")
+    wav_files = sorted(p for p in clip_dir.glob("*.wav") if _orig_re.match(p.name))
 
     for wav_path in tqdm(wav_files, desc=f"Augmenting {clip_dir.name}", unit="clip"):
         audio, sr = sf.read(str(wav_path))

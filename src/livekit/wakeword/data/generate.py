@@ -8,8 +8,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-
 from ..config import WakeWordConfig
 from ._piper_generate import generate_samples
 
@@ -95,6 +93,36 @@ def _count_original_clips(directory: Path) -> int:
     return sum(1 for f in directory.iterdir() if _ORIGINAL_CLIP_RE.match(f.name))
 
 
+def _expand_unknown_words(
+    words: list[str],
+    cmu: dict[str, list[str]],
+) -> list[str]:
+    """Expand words not in CMUDict by splitting into known subwords.
+
+    For example, "livekit" → ["live", "kit"] since both are in CMUDict.
+    Known words are kept as-is.
+    """
+    expanded: list[str] = []
+    for word in words:
+        if word in cmu:
+            expanded.append(word)
+            continue
+        # Try all split points, prefer longest left match
+        best_split: tuple[str, str] | None = None
+        for i in range(2, len(word) - 1):
+            left, right = word[:i], word[i:]
+            if left in cmu and right in cmu:
+                if best_split is None or len(left) > len(best_split[0]):
+                    best_split = (left, right)
+        if best_split is not None:
+            logger.debug("Split unknown word %r → %r", word, best_split)
+            expanded.extend(best_split)
+        else:
+            # Can't split — keep original (will be skipped in substitution)
+            expanded.append(word)
+    return expanded
+
+
 def generate_adversarial_phrases(
     target_phrases: list[str],
     n_phrases: int = 200,
@@ -104,7 +132,9 @@ def generate_adversarial_phrases(
     """Generate phonetically similar phrases to the target using CMUDict.
 
     For each word in target phrases, find words with similar phonemes and
-    combine them to create adversarial negative phrases.
+    combine them to create adversarial negative phrases. Unknown words
+    (not in CMUDict) are split into known subwords when possible, e.g.
+    "livekit" → "live" + "kit", allowing substitutions on both parts.
     """
     import pronouncing
 
@@ -113,7 +143,9 @@ def generate_adversarial_phrases(
     adversarial: list[str] = []
 
     for phrase in target_phrases:
-        words = phrase.lower().split()
+        raw_words = phrase.lower().split()
+        words = _expand_unknown_words(raw_words, cmu)
+
         # Get phonemes for each word
         word_phonemes: list[list[str]] = []
         for word in words:
@@ -159,8 +191,9 @@ def generate_adversarial_phrases(
                 if random.random() < include_input_words:
                     adversarial.append(word)
 
-    # Deduplicate and limit
-    adversarial = list(set(adversarial))
+    # Deduplicate, remove the original target phrases, and limit
+    target_set = {p.lower() for p in target_phrases}
+    adversarial = [p for p in set(adversarial) if p not in target_set]
     random.shuffle(adversarial)
     return adversarial[:n_phrases]
 
@@ -188,49 +221,28 @@ def synthesize_clips(
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    if vits_model_path is not None and vits_model_path.exists():
-        try:
-            generated = generate_samples(
-                text=phrases,
-                output_dir=output_dir,
-                max_samples=n_samples,
-                model=vits_model_path,
-                batch_size=batch_size,
-                slerp_weights=slerp_weights,
-                length_scales=length_scales,
-                noise_scales=noise_scales,
-                noise_scale_ws=noise_scale_ws,
-                max_speakers=max_speakers,
-                start_index=start_index,
-            )
-            logger.info(f"Generated {len(generated)} clips in {output_dir}")
-            return generated
-        except Exception as e:
-            logger.warning(f"VITS generation failed: {e}")
-            logger.warning("Falling back to silence placeholders.")
-
-    # Fallback: generate silence placeholders
-    fallback: list[Path] = []
-    for clip_idx in range(start_index, n_samples):
-        out_path = output_dir / f"clip_{clip_idx:06d}.wav"
-        _write_silence(out_path, duration_s=1.0)
-        fallback.append(out_path)
-
-    logger.info(f"Generated {len(fallback)} clips in {output_dir}")
-    if fallback:
-        logger.warning(
-            f"All {len(fallback)} clips are silence placeholders "
-            f"(VITS model unavailable). Model quality will be degraded."
+    if vits_model_path is None or not vits_model_path.exists():
+        raise FileNotFoundError(
+            f"VITS model not found at {vits_model_path}. "
+            "Cannot generate audio — refusing to produce silent placeholders. "
+            "Download the model first: python -m livekit.wakeword.data setup"
         )
-    return fallback
 
-
-def _write_silence(path: Path, duration_s: float = 1.0, sample_rate: int = 16000) -> None:
-    """Write a silent WAV file as a placeholder."""
-    import soundfile as sf
-
-    samples = np.zeros(int(sample_rate * duration_s), dtype=np.float32)
-    sf.write(str(path), samples, sample_rate)
+    generated = generate_samples(
+        text=phrases,
+        output_dir=output_dir,
+        max_samples=n_samples,
+        model=vits_model_path,
+        batch_size=batch_size,
+        slerp_weights=slerp_weights,
+        length_scales=length_scales,
+        noise_scales=noise_scales,
+        noise_scale_ws=noise_scale_ws,
+        max_speakers=max_speakers,
+        start_index=start_index,
+    )
+    logger.info(f"Generated {len(generated)} clips in {output_dir}")
+    return generated
 
 
 def run_generate(config: WakeWordConfig) -> None:
@@ -241,8 +253,12 @@ def run_generate(config: WakeWordConfig) -> None:
     existing count.
     """
     model_dir = config.model_output_dir
-    vits_model = config.data_path / "piper" / "en-us-libritts-high.pt"
-    vits_path = vits_model if vits_model.exists() else None
+    vits_path = config.data_path / "piper" / "en-us-libritts-high.pt"
+    if not vits_path.exists():
+        raise FileNotFoundError(
+            f"VITS model not found at {vits_path}. "
+            "Run setup first: python -m livekit.wakeword.data setup"
+        )
 
     synth_kwargs: dict[str, Any] = {
         "noise_scales": config.noise_scales,

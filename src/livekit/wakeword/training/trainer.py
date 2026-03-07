@@ -104,6 +104,12 @@ class WakeWordTrainer:
             # Reshape 2D (N, 96) → 3D (N//16, 16, 96) if needed
             if val_neg.ndim == 2:
                 n_full = (val_neg.shape[0] // 16) * 16
+                remainder = val_neg.shape[0] - n_full
+                if remainder > 0:
+                    logger.warning(
+                        "Dropping %d/%d validation samples (not divisible by 16)",
+                        remainder, val_neg.shape[0],
+                    )
                 val_neg = val_neg[:n_full].reshape(-1, 16, 96)
             neg = np.concatenate([neg, val_neg], axis=0) if neg.shape[0] > 0 else val_neg
 
@@ -127,7 +133,13 @@ class WakeWordTrainer:
             return {"fpph": 0.0, "recall": 0.0, "accuracy": 0.0, "threshold": 0.5}
         pos_preds = self._predict(pos_features)
         neg_preds = self._predict(neg_features) if neg_features.shape[0] > 0 else np.array([])
-        return evaluate_model(pos_preds, neg_preds, threshold=0.5)
+
+        # Compute actual validation hours from clip count × clip duration
+        clip_duration = self.config.augmentation.clip_duration
+        validation_hours = neg_features.shape[0] * clip_duration / 3600.0
+        return evaluate_model(
+            pos_preds, neg_preds, threshold=0.5, validation_hours=validation_hours,
+        )
 
     def _save_checkpoint(self, step: int, phase: int, metrics: dict[str, float]) -> None:
         """Save checkpoint if it meets quality criteria."""
@@ -181,13 +193,15 @@ class WakeWordTrainer:
             predictions = self.model(features).squeeze(-1)
             loss_per_sample = criterion(predictions, labels)
 
-            # Hard example mining
+            # Hard example mining: keep samples the model gets wrong or is
+            # uncertain about.  Negatives predicted above 0.1 are potential
+            # false positives; positives predicted below 0.9 need more work.
             with torch.no_grad():
                 hard_mask = torch.ones_like(labels, dtype=torch.bool)
                 neg_mask = labels < 0.5
                 pos_mask = labels >= 0.5
-                hard_mask[neg_mask] = predictions[neg_mask] >= 0.001
-                hard_mask[pos_mask] = predictions[pos_mask] < 0.999
+                hard_mask[neg_mask] = predictions[neg_mask] >= 0.1
+                hard_mask[pos_mask] = predictions[pos_mask] < 0.9
 
             # Negative weighting
             neg_weight = _negative_weight_schedule(step, steps, max_negative_weight)
