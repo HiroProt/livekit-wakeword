@@ -14,30 +14,21 @@ from ..config import WakeWordConfig
 logger = logging.getLogger(__name__)
 
 
-def _load_validation_features(
-    config: WakeWordConfig,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, np.ndarray | None]:
+def _load_validation_features(config: WakeWordConfig) -> tuple[np.ndarray, np.ndarray]:
     """Load positive and negative validation features from pre-extracted .npy files.
 
     Returns:
-        (positive_features, negative_features, positive_vad, negative_vad)
-        Features are shaped (N, 16, 96).  VAD arrays are (N,) floats or
-        None when VAD scores are not available.
+        (positive_features, negative_features) each shaped (N, 16, 96).
     """
     model_dir = config.model_output_dir
     pos_path = model_dir / "positive_features_test.npy"
     neg_path = model_dir / "negative_features_test.npy"
-    pos_vad_path = model_dir / "positive_vad_test.npy"
-    neg_vad_path = model_dir / "negative_vad_test.npy"
 
     pos = np.load(str(pos_path)) if pos_path.exists() else np.zeros((0, 16, 96))
     neg = np.load(str(neg_path)) if neg_path.exists() else np.zeros((0, 16, 96))
-    pos_vad = np.load(str(pos_vad_path)) if pos_vad_path.exists() else None
-    neg_vad = np.load(str(neg_vad_path)) if neg_vad_path.exists() else None
 
     # Also include general negative validation features if available
     val_path = config.data_path / "features" / "validation_set_features.npy"
-    val_vad_path = config.data_path / "features" / "validation_set_vad.npy"
     if val_path.exists():
         val_neg = np.load(str(val_path))
         if val_neg.ndim == 2:
@@ -52,21 +43,6 @@ def _load_validation_features(
             val_neg = val_neg[:n_full].reshape(-1, 16, 96)
         neg = np.concatenate([neg, val_neg], axis=0) if neg.shape[0] > 0 else val_neg
 
-        # Extend negative VAD scores if available
-        if val_vad_path.exists():
-            val_vad = np.load(str(val_vad_path))
-            if val_neg.ndim == 2:
-                val_vad = val_vad[:n_full // 16] if len(val_vad) > n_full // 16 else val_vad
-            if neg_vad is not None:
-                neg_vad = np.concatenate([neg_vad, val_vad])
-            else:
-                neg_vad = val_vad
-        elif neg_vad is not None:
-            # No VAD for validation set — fill with 1.0 (assume speech)
-            neg_vad = np.concatenate(
-                [neg_vad, np.ones(val_neg.shape[0], dtype=np.float32)]
-            )
-
     if pos.shape[0] == 0:
         raise ValueError(
             f"No positive validation features found at {pos_path}. "
@@ -80,9 +56,7 @@ def _load_validation_features(
         )
 
     logger.info(f"Loaded {pos.shape[0]} positive, {neg.shape[0]} negative validation samples")
-    if pos_vad is not None:
-        logger.info("VAD scores available — will apply VAD mask during eval")
-    return pos, neg, pos_vad, neg_vad
+    return pos, neg
 
 
 def _predict_onnx(
@@ -199,19 +173,12 @@ def _plot_det_curve(
     logger.info(f"DET curve saved to {output_path}")
 
 
-def run_eval(
-    config: WakeWordConfig,
-    model_path: str | Path,
-    vad_threshold: float | None = None,
-) -> dict[str, float]:
+def run_eval(config: WakeWordConfig, model_path: str | Path) -> dict[str, float]:
     """Run full evaluation: compute scores, DET curve, AUT, and save plot + metrics JSON.
 
     Args:
         config: Wake word configuration (used to locate validation data).
         model_path: Path to the ONNX classifier model to evaluate.
-        vad_threshold: When set, apply the VAD gate during evaluation.
-            Clips whose VAD speech probability is below this threshold
-            receive a score of 0.0.  Pass ``None`` to skip VAD gating.
 
     Returns:
         Dict with keys: aut, fpph, recall, accuracy, threshold
@@ -225,31 +192,12 @@ def run_eval(
     logger.info(f"Loaded model from {model_path}")
 
     # Load validation data
-    pos_features, neg_features, pos_vad, neg_vad = _load_validation_features(config)
+    pos_features, neg_features = _load_validation_features(config)
 
     # Run predictions
     logger.info("Running predictions on validation set...")
     pos_scores = _predict_onnx(session, pos_features)
     neg_scores = _predict_onnx(session, neg_features)
-
-    # Apply VAD mask: zero out scores where VAD says no speech
-    if vad_threshold is not None:
-        if pos_vad is not None:
-            rejected_pos = pos_vad < vad_threshold
-            pos_scores[rejected_pos] = 0.0
-            logger.info(
-                "VAD rejected %d/%d positive clips (%.1f%%)",
-                rejected_pos.sum(), len(rejected_pos),
-                100.0 * rejected_pos.sum() / max(len(rejected_pos), 1),
-            )
-        if neg_vad is not None:
-            rejected_neg = neg_vad < vad_threshold
-            neg_scores[rejected_neg] = 0.0
-            logger.info(
-                "VAD rejected %d/%d negative clips (%.1f%%)",
-                rejected_neg.sum(), len(rejected_neg),
-                100.0 * rejected_neg.sum() / max(len(rejected_neg), 1),
-            )
 
     # Compute DET curve
     thresholds, fpr, fnr = _compute_det_curve(pos_scores, neg_scores)

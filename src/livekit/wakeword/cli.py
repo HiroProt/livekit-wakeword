@@ -279,9 +279,6 @@ def eval(
     model_path: str = typer.Option(
         None, "--model", "-m", help="Path to ONNX model (default: <output_dir>/<model_name>.onnx)"
     ),
-    vad_threshold: float = typer.Option(
-        None, "--vad-threshold", help="Apply VAD gate during eval (e.g. 0.5)"
-    ),
 ) -> None:
     """Evaluate model on validation set: DET curve, AUT, FPPH, recall."""
     from pathlib import Path
@@ -297,7 +294,7 @@ def eval(
 
     from .eval.evaluate import run_eval
 
-    results = run_eval(config, resolved_model, vad_threshold=vad_threshold)
+    results = run_eval(config, resolved_model)
 
     logger.info(
         f"AUT={results['aut']:.4f}  FPPH={results['fpph']:.2f}  "
