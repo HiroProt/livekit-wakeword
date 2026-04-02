@@ -40,6 +40,14 @@ uv run livekit-wakeword eval configs/hey_livekit.yaml
 uv run livekit-wakeword eval configs/hey_livekit.yaml -m /path/to/model.onnx
 ```
 
+**Evaluate with VAD gating** to see how the VAD gate affects metrics:
+
+```bash
+uv run livekit-wakeword eval configs/hey_livekit.yaml --vad-threshold 0.5
+```
+
+When `--vad-threshold` is set, clips whose pre-computed VAD speech probability is below the threshold receive a score of 0.0 before metrics are computed. This reflects real-world behavior when `WakeWordModel(vad_enabled=True)` is used. Requires that feature extraction has been run (VAD scores are saved as `*_vad_*.npy` sidecar files).
+
 If `--model` is not specified, the default path `output/<model_name>/<model_name>.onnx` is used.
 
 ## Python API
@@ -52,17 +60,11 @@ from livekit.wakeword.eval.evaluate import run_eval
 config = load_config("configs/hey_livekit.yaml")
 model_path = Path("output/hey_livekit/hey_livekit.onnx")
 
+# Without VAD gating
 results = run_eval(config, model_path)
-# results = {
-#     "aut": 0.0012,
-#     "fpph": 0.08,
-#     "recall": 0.861,
-#     "accuracy": 0.93,
-#     "threshold": 0.68,
-#     "n_positive": 15000,
-#     "n_negative": 45084,
-#     "validation_hours": 25.05,
-# }
+
+# With VAD gating (matches runtime behavior of vad_enabled=True)
+results = run_eval(config, model_path, vad_threshold=0.5)
 ```
 
 ## Metrics

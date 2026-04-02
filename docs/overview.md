@@ -6,7 +6,7 @@ livekit-wakeword uses a hybrid ONNX + PyTorch architecture. Two frozen ONNX mode
 
 **Training Pipeline:** Synthetic speech is generated via VITS TTS with SLERP speaker blending, augmented with noise/reverb, then passed through frozen ONNX models (mel spectrogram → speech embedding) to produce `.npy` feature files. These features train a lightweight classifier head, which is saved as a `.pt` model.
 
-**Inference Pipeline:** Raw 16kHz audio flows through the same frozen ONNX feature extractors (32-band mel spectrogram → 96-dim speech embedding), then through the trained classifier (exported to ONNX) to produce a detection score between 0 and 1.
+**Inference Pipeline:** Raw 16kHz audio flows through an optional Silero VAD gate, the same frozen ONNX feature extractors (32-band mel spectrogram → 96-dim speech embedding), then through the trained classifier (exported to ONNX) to produce a detection score between 0 and 1. The `WakeWordListener` applies LiveKit APM noise suppression, high-pass filtering, and auto gain control before inference.
 
 ## Why ONNX + PyTorch?
 
@@ -73,7 +73,8 @@ src/livekit/wakeword/
 │   └── onnx.py                  ONNX export + INT8 quantization
 └── inference/
     ├── model.py                 WakeWordModel class (simple prediction API)
-    └── listener.py              WakeWordListener class (async microphone detection)
+    ├── listener.py              WakeWordListener class (async microphone detection)
+    └── vad.py                   SileroVAD wrapper (speech detection gate)
 ```
 
 ## Pipeline Stages

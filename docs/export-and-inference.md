@@ -38,16 +38,19 @@ livekit-wakeword export configs/hey_jarvis.yaml --quantize
 
 ## Inference API
 
-**Source:** `src/livekit/wakeword/inference/model.py`, `src/livekit/wakeword/inference/listener.py`
+**Source:** `src/livekit/wakeword/inference/model.py`, `src/livekit/wakeword/inference/listener.py`, `src/livekit/wakeword/inference/vad.py`
 
 ### WakeWordModel
 
-The `WakeWordModel` class is a stateless prediction API for wake word detection. Pass a complete audio window (~2 seconds) and receive confidence scores.
+The `WakeWordModel` class is a stateless prediction API for wake word detection. Pass a complete audio window (~2 seconds) and receive confidence scores. An optional Silero VAD gate can skip expensive inference when no speech is detected.
 
 ```python
 from livekit.wakeword import WakeWordModel
 
 model = WakeWordModel(models=["hey_livekit.onnx"])
+
+# With VAD gate enabled
+model = WakeWordModel(models=["hey_livekit.onnx"], vad_enabled=True, vad_threshold=0.5)
 
 # Pass ~2 seconds of 16kHz audio
 scores = model.predict(audio_chunk)
@@ -59,10 +62,16 @@ scores = model.predict(audio_chunk)
 ```python
 WakeWordModel(
     models: list[str | Path] | None = None,  # Paths to ONNX classifiers
+    vad_enabled: bool = False,                # Gate inference with Silero VAD
+    vad_threshold: float = 0.5,               # Min speech probability to run inference
 )
 ```
 
-Feature extraction models (`melspectrogram.onnx`, `embedding_model.onnx`) are bundled with the package and loaded automatically.
+Feature extraction models (`melspectrogram.onnx`, `embedding_model.onnx`) and the Silero VAD model (`silero_vad.onnx`) are bundled with the package and loaded automatically.
+
+#### VAD Gate
+
+When `vad_enabled=True`, `predict()` first runs Silero VAD on the audio chunk. If the peak speech probability is below `vad_threshold`, all models return 0.0 without running the full mel → embedding → classifier pipeline. This saves CPU during silence and reduces false positives from noise.
 
 #### Methods
 
@@ -100,9 +109,12 @@ asyncio.run(main())
 
 ```python
 WakeWordListener(
-    model: WakeWordModel,    # WakeWordModel instance with loaded classifiers
-    threshold: float = 0.5,  # Detection threshold (0-1)
-    debounce: float = 2.0    # Minimum seconds between detections
+    model: WakeWordModel,           # WakeWordModel instance with loaded classifiers
+    threshold: float = 0.5,         # Detection threshold (0-1)
+    debounce: float = 2.0,          # Minimum seconds between detections
+    noise_suppression: bool = True,  # WebRTC noise suppression via LiveKit APM
+    high_pass_filter: bool = True,   # Remove low-frequency rumble
+    auto_gain_control: bool = True,  # Normalize mic volume
 )
 ```
 
@@ -122,7 +134,7 @@ The listener is designed as an async context manager. On each `__aenter__`, all 
 
 #### Audio Capture
 
-Uses PyAudio to capture from the default microphone:
+Uses PyAudio to capture from the default microphone. Each frame is processed through LiveKit's `AudioProcessingModule` for noise suppression, high-pass filtering, and auto gain control before buffering.
 
 | Parameter | Value |
 |-----------|-------|
@@ -130,3 +142,18 @@ Uses PyAudio to capture from the default microphone:
 | Channels | 1 (mono) |
 | Sample rate | 16,000 Hz |
 | Buffer size | 1,280 samples (80ms) |
+| APM frame size | 160 samples (10ms) |
+
+The 80ms capture frames are split into 8 × 10ms sub-frames for APM processing (WebRTC requires exactly 10ms frames), then reassembled before buffering.
+
+#### Audio Processing (LiveKit APM)
+
+The listener uses LiveKit's `AudioProcessingModule` (WebRTC-based) to clean captured audio before inference:
+
+| Feature | Default | Description |
+|---------|---------|-------------|
+| `noise_suppression` | `True` | WebRTC noise suppression |
+| `high_pass_filter` | `True` | Removes low-frequency rumble |
+| `auto_gain_control` | `True` | Normalizes microphone volume |
+
+All three can be disabled by passing `False` to the constructor. When all are disabled, the APM is not created and raw audio passes through unchanged.

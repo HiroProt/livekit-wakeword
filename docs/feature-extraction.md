@@ -191,16 +191,16 @@ Left-padding places zeros at the **beginning** of the sequence, so the real audi
 
 `run_extraction(config)` processes all four data splits:
 
-| Clip Directory    | Output File                   |
-| ----------------- | ----------------------------- |
-| `positive_train/` | `positive_features_train.npy` |
-| `positive_test/`  | `positive_features_test.npy`  |
-| `negative_train/` | `negative_features_train.npy` |
-| `negative_test/`  | `negative_features_test.npy`  |
+| Clip Directory    | Feature File                  | VAD Score File             |
+| ----------------- | ----------------------------- | -------------------------- |
+| `positive_train/` | `positive_features_train.npy` | `positive_vad_train.npy`   |
+| `positive_test/`  | `positive_features_test.npy`  | `positive_vad_test.npy`    |
+| `negative_train/` | `negative_features_train.npy` | `negative_vad_train.npy`   |
+| `negative_test/`  | `negative_features_test.npy`  | `negative_vad_test.npy`    |
 
-Each `.npy` file contains a float32 array of shape `(N_clips, 16, 96)`.
+Each feature `.npy` file contains a float32 array of shape `(N_clips, 16, 96)`. Each VAD score `.npy` file contains a float32 array of shape `(N_clips,)` with the peak Silero VAD speech probability per clip.
 
-Audio files are read via `soundfile`, converted to float32, reduced to mono if stereo, and processed one clip at a time.
+Audio files are read via `soundfile`, converted to float32, reduced to mono if stereo, and processed one clip at a time. Silero VAD is run on each raw audio clip alongside feature extraction to produce the VAD scores used during evaluation.
 
 ## Memory-Mapped Dataset
 
