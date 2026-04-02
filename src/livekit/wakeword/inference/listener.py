@@ -21,6 +21,9 @@ CHUNK_SECONDS = 2.0
 # Number of frames that fill a ~2-second chunk (25 × 80ms = 2000ms)
 CHUNK_FRAMES = int(CHUNK_SECONDS * SAMPLE_RATE / FRAME_SAMPLES)
 
+# APM requires exactly 10ms frames (160 samples at 16 kHz)
+APM_FRAME_SAMPLES = SAMPLE_RATE // 100  # 160
+
 
 @dataclass
 class Detection:
@@ -55,6 +58,9 @@ class WakeWordListener:
         model: WakeWordModel,
         threshold: float = 0.5,
         debounce: float = 2.0,
+        noise_suppression: bool = True,
+        high_pass_filter: bool = True,
+        auto_gain_control: bool = True,
     ):
         """Initialize listener.
 
@@ -62,13 +68,20 @@ class WakeWordListener:
             model: WakeWordModel instance with loaded classifiers.
             threshold: Detection threshold (0-1).
             debounce: Minimum seconds between detections.
+            noise_suppression: Enable WebRTC noise suppression via LiveKit APM.
+            high_pass_filter: Enable high-pass filter to remove low-frequency rumble.
+            auto_gain_control: Enable automatic gain control to normalize mic volume.
         """
         self._model = model
         self._threshold = threshold
         self._debounce = debounce
+        self._noise_suppression = noise_suppression
+        self._high_pass_filter = high_pass_filter
+        self._auto_gain_control = auto_gain_control
 
         self._stream = None
         self._pa = None
+        self._apm = None
         self._task: asyncio.Task | None = None
         self._running = False
         self._last_detection_time = 0.0
@@ -103,6 +116,33 @@ class WakeWordListener:
             input=True,
             frames_per_buffer=FRAME_SAMPLES,
         )
+
+        # Create LiveKit APM for audio processing if any feature is enabled
+        apm_enabled = (
+            self._noise_suppression or self._high_pass_filter or self._auto_gain_control
+        )
+        if apm_enabled:
+            try:
+                from livekit.rtc import AudioProcessingModule
+
+                self._apm = AudioProcessingModule(
+                    noise_suppression=self._noise_suppression,
+                    high_pass_filter=self._high_pass_filter,
+                    auto_gain_control=self._auto_gain_control,
+                )
+                logger.info(
+                    "LiveKit APM enabled (ns=%s, hpf=%s, agc=%s)",
+                    self._noise_suppression,
+                    self._high_pass_filter,
+                    self._auto_gain_control,
+                )
+            except ImportError:
+                logger.warning(
+                    "livekit package not installed — audio processing disabled. "
+                    "Install with: pip install livekit"
+                )
+                self._apm = None
+
         self._running = True
         self._listening.set()
         self._done_event.clear()
@@ -143,6 +183,31 @@ class WakeWordListener:
         if self._pa:
             self._pa.terminate()
 
+    def _apply_apm(self, frame: np.ndarray) -> np.ndarray:
+        """Apply LiveKit APM to an audio frame.
+
+        Splits the frame into 10ms sub-frames required by the APM,
+        processes each, and reassembles.
+        """
+        from livekit.rtc import AudioFrame
+
+        n_samples = len(frame)
+        out_parts: list[np.ndarray] = []
+        for start in range(0, n_samples, APM_FRAME_SAMPLES):
+            end = start + APM_FRAME_SAMPLES
+            if end > n_samples:
+                break
+            sub = frame[start:end]
+            apm_frame = AudioFrame(
+                data=sub.tobytes(),
+                sample_rate=SAMPLE_RATE,
+                num_channels=1,
+                samples_per_channel=APM_FRAME_SAMPLES,
+            )
+            self._apm.process_stream(apm_frame)  # type: ignore[union-attr]
+            out_parts.append(np.frombuffer(apm_frame.data, dtype=np.int16).copy())
+        return np.concatenate(out_parts) if out_parts else frame
+
     async def _audio_loop(self) -> None:
         """Background task that captures audio and runs detection."""
         loop = asyncio.get_event_loop()
@@ -165,6 +230,11 @@ class WakeWordListener:
                     break
 
                 frame = np.frombuffer(data, dtype=np.int16)
+
+                # Apply noise suppression / AGC / high-pass filter via APM
+                if self._apm is not None:
+                    frame = self._apply_apm(frame)
+
                 self._frame_buffer.append(frame)
 
                 # Wait until the buffer has enough audio for the model

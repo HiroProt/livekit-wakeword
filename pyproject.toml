@@ -31,6 +31,7 @@ dependencies = [
 [project.optional-dependencies]
 listener = [
     "pyaudio>=0.2.14",
+    "livekit>=1.0",
 ]
 train = [
     "torch>=2.2",
