@@ -2,5 +2,6 @@
 
 from .listener import Detection, WakeWordListener
 from .model import WakeWordModel
+from .vad import SileroVAD
 
-__all__ = ["Detection", "WakeWordListener", "WakeWordModel"]
+__all__ = ["Detection", "SileroVAD", "WakeWordListener", "WakeWordModel"]

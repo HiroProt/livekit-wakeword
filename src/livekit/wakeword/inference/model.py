@@ -37,13 +37,29 @@ class WakeWordModel:
     def __init__(
         self,
         models: list[str | Path] | None = None,
+        vad_enabled: bool = False,
+        vad_threshold: float = 0.5,
     ):
         """Initialize the wake word detection model.
 
         Args:
             models: List of paths to wake word ONNX classifier models.
                 If None, no models are loaded (call load_model() later).
+            vad_enabled: Gate inference with Silero VAD. When True, chunks
+                without detected speech return zero scores.
+            vad_threshold: Minimum speech probability to proceed with
+                inference (only used when *vad_enabled* is True).
         """
+        self._vad_enabled = vad_enabled
+        self._vad_threshold = vad_threshold
+        self._vad = None
+
+        if vad_enabled:
+            from .vad import SileroVAD
+
+            self._vad = SileroVAD()
+            logger.info("VAD enabled (threshold=%.2f)", vad_threshold)
+
         mel_path = get_mel_model_path()
         embedding_path = get_embedding_model_path()
 
@@ -114,6 +130,12 @@ class WakeWordModel:
             audio_chunk = audio_chunk.astype(np.float32) / 32768.0
 
         audio_chunk = audio_chunk.flatten()
+
+        # VAD gate: skip expensive inference when no speech is detected
+        if self._vad is not None:
+            speech_prob = self._vad.check_speech(audio_chunk)
+            if speech_prob < self._vad_threshold:
+                return {name: 0.0 for name in self._classifiers}
 
         # Mel spectrogram over the full chunk
         all_mel = self._mel_frontend(audio_chunk)

@@ -23,3 +23,8 @@ def get_mel_model_path() -> Path:
 def get_embedding_model_path() -> Path:
     """Get path to bundled embedding_model.onnx model."""
     return get_resource_path("embedding_model.onnx")
+
+
+def get_vad_model_path() -> Path:
+    """Get path to bundled silero_vad.onnx model."""
+    return get_resource_path("silero_vad.onnx")
