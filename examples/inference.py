@@ -6,11 +6,13 @@ import numpy as np
 
 from livekit.wakeword import WakeWordModel
 
-# Load model (VAD is enabled by default — silence returns 0.0 without running inference)
-model = WakeWordModel(models=[Path(__file__).parent / "resources" / "hey_livekit.onnx"])
-
-# To disable VAD:
-# model = WakeWordModel(models=[...], vad_enabled=False)
+# Load model with VAD disabled — this example uses random noise which VAD
+# would (correctly) reject as non-speech, returning all zeros.
+# For real audio, leave vad_enabled=True (default) to skip inference on silence.
+model = WakeWordModel(
+    models=[Path(__file__).parent / "resources" / "hey_livekit.onnx"],
+    vad_enabled=False,
+)
 
 # Simulate 3 seconds of random audio (16kHz)
 audio = np.random.randint(-32768, 32767, size=48000, dtype=np.int16)
