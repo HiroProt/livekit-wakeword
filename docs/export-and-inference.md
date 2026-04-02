@@ -62,7 +62,7 @@ scores = model.predict(audio_chunk)
 ```python
 WakeWordModel(
     models: list[str | Path] | None = None,  # Paths to ONNX classifiers
-    vad_enabled: bool = False,                # Gate inference with Silero VAD
+    vad_enabled: bool = True,                 # Gate inference with Silero VAD
     vad_threshold: float = 0.5,               # Min speech probability to run inference
 )
 ```

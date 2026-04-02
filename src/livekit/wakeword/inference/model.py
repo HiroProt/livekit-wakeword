@@ -37,7 +37,7 @@ class WakeWordModel:
     def __init__(
         self,
         models: list[str | Path] | None = None,
-        vad_enabled: bool = False,
+        vad_enabled: bool = True,
         vad_threshold: float = 0.5,
     ):
         """Initialize the wake word detection model.
