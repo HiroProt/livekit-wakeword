@@ -10,6 +10,8 @@ model = WakeWordModel(models=[Path(__file__).parent / "resources" / "hey_livekit
 
 
 async def main():
+    # LiveKit APM noise suppression, high-pass filter, and AGC are enabled by default.
+    # To disable: pass noise_suppression=False, high_pass_filter=False, auto_gain_control=False
     async with WakeWordListener(model, threshold=0.5, debounce=2.0) as listener:
         print("Listening... Press Ctrl+C to stop.\n")
         while True:
