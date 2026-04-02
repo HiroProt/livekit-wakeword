@@ -35,12 +35,11 @@ class SileroVAD:
             str(path), providers=["CPUExecutionProvider"]
         )
 
-    def _fresh_state(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Return zeroed (sr, h, c) tensors for a fresh forward pass."""
+    def _fresh_state(self) -> tuple[np.ndarray, np.ndarray]:
+        """Return zeroed (state, sr) tensors for a fresh forward pass."""
+        state = np.zeros((2, 1, 128), dtype=np.float32)
         sr = np.array(_VAD_SAMPLE_RATE, dtype=np.int64)
-        h = np.zeros((2, 1, 64), dtype=np.float32)
-        c = np.zeros((2, 1, 64), dtype=np.float32)
-        return sr, h, c
+        return state, sr
 
     def check_speech(self, audio: np.ndarray) -> float:
         """Return the peak speech probability across the audio chunk.
@@ -58,16 +57,16 @@ class SileroVAD:
             audio = audio.astype(np.float32) / 32768.0
         audio = audio.flatten()
 
-        sr, h, c = self._fresh_state()
+        state, sr = self._fresh_state()
         peak = 0.0
 
         for start in range(0, len(audio) - _VAD_WINDOW + 1, _VAD_WINDOW):
             window = audio[start : start + _VAD_WINDOW][np.newaxis, :]
-            out, h, c = self._session.run(
+            out, state = self._session.run(
                 None,
-                {"input": window, "sr": sr, "h": h, "c": c},
+                {"input": window, "state": state, "sr": sr},
             )
-            prob = float(out[0])
+            prob = float(out[0].item())
             if prob > peak:
                 peak = prob
 

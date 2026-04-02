@@ -122,26 +122,19 @@ class WakeWordListener:
             self._noise_suppression or self._high_pass_filter or self._auto_gain_control
         )
         if apm_enabled:
-            try:
-                from livekit.rtc import AudioProcessingModule
+            from livekit.rtc import AudioProcessingModule
 
-                self._apm = AudioProcessingModule(
-                    noise_suppression=self._noise_suppression,
-                    high_pass_filter=self._high_pass_filter,
-                    auto_gain_control=self._auto_gain_control,
-                )
-                logger.info(
-                    "LiveKit APM enabled (ns=%s, hpf=%s, agc=%s)",
-                    self._noise_suppression,
-                    self._high_pass_filter,
-                    self._auto_gain_control,
-                )
-            except ImportError:
-                logger.warning(
-                    "livekit package not installed — audio processing disabled. "
-                    "Install with: pip install livekit"
-                )
-                self._apm = None
+            self._apm = AudioProcessingModule(
+                noise_suppression=self._noise_suppression,
+                high_pass_filter=self._high_pass_filter,
+                auto_gain_control=self._auto_gain_control,
+            )
+            logger.info(
+                "LiveKit APM enabled (ns=%s, hpf=%s, agc=%s)",
+                self._noise_suppression,
+                self._high_pass_filter,
+                self._auto_gain_control,
+            )
 
         self._running = True
         self._listening.set()
