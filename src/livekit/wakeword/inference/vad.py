@@ -12,8 +12,9 @@ from ..resources import get_vad_model_path
 
 logger = logging.getLogger(__name__)
 
-# Silero VAD v5 expects 512-sample windows at 16 kHz
+# Silero VAD v5: 512-sample windows + 64-sample context at 16 kHz
 _VAD_WINDOW = 512
+_VAD_CONTEXT = 64
 _VAD_SAMPLE_RATE = 16000
 
 
@@ -45,7 +46,9 @@ class SileroVAD:
         """Return the peak speech probability across the audio chunk.
 
         Processes the chunk in 512-sample windows with a fresh hidden
-        state each call, so the detector is fully stateless.
+        state each call, so the detector is fully stateless.  Each
+        window is prepended with 64 samples of context from the
+        previous window (required by Silero VAD v5).
 
         Args:
             audio: 16 kHz audio samples (int16 or float32).
@@ -57,17 +60,25 @@ class SileroVAD:
             audio = audio.astype(np.float32) / 32768.0
         audio = audio.flatten()
 
+        if len(audio) < _VAD_WINDOW:
+            return 0.0
+
         state, sr = self._fresh_state()
+        context = np.zeros(_VAD_CONTEXT, dtype=np.float32)
         peak = 0.0
 
         for start in range(0, len(audio) - _VAD_WINDOW + 1, _VAD_WINDOW):
-            window = audio[start : start + _VAD_WINDOW][np.newaxis, :]
+            window = audio[start : start + _VAD_WINDOW]
+            # Silero v5 expects context + window = 576 samples
+            input_frame = np.concatenate([context, window])[np.newaxis, :]
             out, state = self._session.run(
                 None,
-                {"input": window, "state": state, "sr": sr},
+                {"input": input_frame, "state": state, "sr": sr},
             )
             prob = float(out[0].item())
             if prob > peak:
                 peak = prob
+            # Last 64 samples become context for next window
+            context = window[-_VAD_CONTEXT:]
 
         return peak
