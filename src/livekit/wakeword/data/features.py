@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from ..config import WakeWordConfig
+from ..inference.vad import SileroVAD
 from ..models.feature_extractor import MelSpectrogramFrontend, SpeechEmbedding
 from ..resources import get_embedding_model_path, get_mel_model_path
 
@@ -32,11 +33,16 @@ def extract_features_from_directory(
     clip_dir: Path,
     mel_frontend: MelSpectrogramFrontend,
     speech_embedding: SpeechEmbedding,
-) -> np.ndarray:
+    vad: SileroVAD | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
     """Extract (N_clips, 16, 96) features from a directory of WAV files.
 
     Processes clips through MelSpectrogramFrontend → SpeechEmbedding,
     then takes last 16 embedding timesteps per clip.
+
+    Returns:
+        (features, vad_scores) where features is (N, 16, 96) and
+        vad_scores is (N,) with peak speech probability per clip.
     """
     import soundfile as sf
     from tqdm import tqdm
@@ -44,9 +50,13 @@ def extract_features_from_directory(
     wav_files = sorted(clip_dir.glob("*.wav"))
     if not wav_files:
         logger.warning(f"No WAV files in {clip_dir}")
-        return np.zeros((0, N_EMBEDDING_TIMESTEPS, 96), dtype=np.float32)
+        return (
+            np.zeros((0, N_EMBEDDING_TIMESTEPS, 96), dtype=np.float32),
+            np.zeros((0,), dtype=np.float32),
+        )
 
     all_features: list[np.ndarray] = []
+    all_vad_scores: list[float] = []
 
     for wav_path in tqdm(wav_files, desc=f"Features {clip_dir.name}", unit="clip"):
         audio, sr = sf.read(str(wav_path))
@@ -58,10 +68,21 @@ def extract_features_from_directory(
         embeddings = speech_embedding.extract_embeddings(mel)
         all_features.append(_pad_or_truncate(embeddings[0]))
 
-    if not all_features:
-        return np.zeros((0, N_EMBEDDING_TIMESTEPS, 96), dtype=np.float32)
+        if vad is not None:
+            all_vad_scores.append(vad.check_speech(audio))
+        else:
+            all_vad_scores.append(1.0)
 
-    return np.stack(all_features, axis=0)  # (N_clips, 16, 96)
+    if not all_features:
+        return (
+            np.zeros((0, N_EMBEDDING_TIMESTEPS, 96), dtype=np.float32),
+            np.zeros((0,), dtype=np.float32),
+        )
+
+    return (
+        np.stack(all_features, axis=0),
+        np.array(all_vad_scores, dtype=np.float32),
+    )
 
 
 def extract_features_from_long_audio(
@@ -70,19 +91,25 @@ def extract_features_from_long_audio(
     speech_embedding: SpeechEmbedding,
     clip_duration: float = 2.0,
     sample_rate: int = 16000,
-) -> np.ndarray:
+    vad: SileroVAD | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
     """Extract (N_clips, 16, 96) features from long audio files by chunking.
 
     Processes each file through the mel frontend in one pass, then slices
     the mel spectrogram into clip-sized chunks and batches them through
     the embedding model.  Much faster than per-chunk ONNX inference for
     long recordings.
+
+    Returns:
+        (features, vad_scores) where features is (N, 16, 96) and
+        vad_scores is (N,) with peak speech probability per chunk.
     """
     import soundfile as sf
     from tqdm import tqdm
 
     chunk_samples = int(clip_duration * sample_rate)
     all_features: list[np.ndarray] = []
+    all_vad_scores: list[float] = []
 
     for audio_path in tqdm(audio_paths, desc="Features (background)", unit="file"):
         audio, sr = sf.read(str(audio_path))
@@ -118,12 +145,24 @@ def extract_features_from_long_audio(
         for i in range(n_chunks):
             all_features.append(_pad_or_truncate(embeddings[i]))
 
+            if vad is not None:
+                chunk_audio = audio[i * chunk_samples : (i + 1) * chunk_samples]
+                all_vad_scores.append(vad.check_speech(chunk_audio))
+            else:
+                all_vad_scores.append(1.0)
+
     if not all_features:
-        return np.zeros((0, N_EMBEDDING_TIMESTEPS, 96), dtype=np.float32)
+        return (
+            np.zeros((0, N_EMBEDDING_TIMESTEPS, 96), dtype=np.float32),
+            np.zeros((0,), dtype=np.float32),
+        )
 
     features = np.stack(all_features, axis=0)
-    np.random.shuffle(features)
-    return features
+    vad_scores = np.array(all_vad_scores, dtype=np.float32)
+
+    # Shuffle features and vad_scores together
+    perm = np.random.permutation(len(features))
+    return features[perm], vad_scores[perm]
 
 
 def run_extraction(config: WakeWordConfig) -> None:
@@ -134,31 +173,37 @@ def run_extraction(config: WakeWordConfig) -> None:
     speech_embedding = SpeechEmbedding(
         onnx_path=get_embedding_model_path(),
     )
+    vad = SileroVAD()
 
     model_dir = config.model_output_dir
     splits = [
-        ("positive_train", "positive_features_train.npy"),
-        ("positive_test", "positive_features_test.npy"),
-        ("negative_train", "negative_features_train.npy"),
-        ("negative_test", "negative_features_test.npy"),
+        ("positive_train", "positive_features_train.npy", "positive_vad_train.npy"),
+        ("positive_test", "positive_features_test.npy", "positive_vad_test.npy"),
+        ("negative_train", "negative_features_train.npy", "negative_vad_train.npy"),
+        ("negative_test", "negative_features_test.npy", "negative_vad_test.npy"),
     ]
 
-    for clip_subdir, feature_filename in splits:
+    for clip_subdir, feature_filename, vad_filename in splits:
         clip_dir = model_dir / clip_subdir
         if not clip_dir.exists():
             logger.warning(f"Skipping feature extraction for {clip_subdir}: not found")
             continue
 
         logger.info(f"Extracting features from {clip_dir}...")
-        features = extract_features_from_directory(
+        features, vad_scores = extract_features_from_directory(
             clip_dir=clip_dir,
             mel_frontend=mel_frontend,
             speech_embedding=speech_embedding,
+            vad=vad,
         )
 
         out_path = model_dir / feature_filename
         np.save(str(out_path), features)
         logger.info(f"Saved {features.shape} features to {out_path}")
+
+        vad_path = model_dir / vad_filename
+        np.save(str(vad_path), vad_scores)
+        logger.info(f"Saved {vad_scores.shape} VAD scores to {vad_path}")
 
     # Extract features from background noise as standalone negatives
     bg_paths: list[Path] = []
@@ -168,14 +213,19 @@ def run_extraction(config: WakeWordConfig) -> None:
             bg_paths.extend(d.glob("**/*.wav"))
     if bg_paths:
         logger.info(f"Extracting background noise features from {len(bg_paths)} files...")
-        bg_features = extract_features_from_long_audio(
+        bg_features, bg_vad_scores = extract_features_from_long_audio(
             audio_paths=bg_paths,
             mel_frontend=mel_frontend,
             speech_embedding=speech_embedding,
             clip_duration=config.augmentation.clip_duration,
+            vad=vad,
         )
         out_path = model_dir / "background_noise_features.npy"
         np.save(str(out_path), bg_features)
         logger.info(f"Saved {bg_features.shape} background noise features to {out_path}")
+
+        vad_path = model_dir / "background_noise_vad.npy"
+        np.save(str(vad_path), bg_vad_scores)
+        logger.info(f"Saved {bg_vad_scores.shape} background VAD scores to {vad_path}")
     else:
         logger.info("No background noise files found, skipping background feature extraction")
