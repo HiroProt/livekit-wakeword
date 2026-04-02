@@ -122,13 +122,14 @@ class WakeWordListener:
             self._noise_suppression or self._high_pass_filter or self._auto_gain_control
         )
         if apm_enabled:
-            from livekit.rtc import AudioProcessingModule
+            from livekit.rtc import AudioFrame, AudioProcessingModule
 
             self._apm = AudioProcessingModule(
                 noise_suppression=self._noise_suppression,
                 high_pass_filter=self._high_pass_filter,
                 auto_gain_control=self._auto_gain_control,
             )
+            self._audio_frame_cls = AudioFrame
             logger.info(
                 "LiveKit APM enabled (ns=%s, hpf=%s, agc=%s)",
                 self._noise_suppression,
@@ -182,8 +183,6 @@ class WakeWordListener:
         Splits the frame into 10ms sub-frames required by the APM,
         processes each, and reassembles.
         """
-        from livekit.rtc import AudioFrame
-
         n_samples = len(frame)
         out_parts: list[np.ndarray] = []
         for start in range(0, n_samples, APM_FRAME_SAMPLES):
@@ -191,7 +190,7 @@ class WakeWordListener:
             if end > n_samples:
                 break
             sub = frame[start:end]
-            apm_frame = AudioFrame(
+            apm_frame = self._audio_frame_cls(
                 data=sub.tobytes(),
                 sample_rate=SAMPLE_RATE,
                 num_channels=1,

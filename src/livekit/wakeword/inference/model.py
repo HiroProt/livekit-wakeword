@@ -50,7 +50,6 @@ class WakeWordModel:
             vad_threshold: Minimum speech probability to proceed with
                 inference (only used when *vad_enabled* is True).
         """
-        self._vad_enabled = vad_enabled
         self._vad_threshold = vad_threshold
         self._vad = None
 

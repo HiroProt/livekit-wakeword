@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import random
+import re
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,10 @@ import torch
 from ..config import WakeWordConfig
 
 logger = logging.getLogger(__name__)
+
+# Matches original TTS clips (clip_000000.wav) vs augmented variants (clip_000000_r1.wav)
+_ORIGINAL_CLIP_RE = re.compile(r"^clip_\d{6}\.wav$")
+_AUGMENTED_CLIP_RE = re.compile(r"^clip_\d{6}_r\d+\.wav$")
 
 
 class AudioAugmentor:
@@ -182,20 +187,17 @@ def align_clip_to_end(
 
 def run_augment(config: WakeWordConfig) -> None:
     """Run augmentation pipeline on generated clips."""
-    import re
-
     target_duration = config.augmentation.clip_duration
 
     model_dir = config.model_output_dir
 
     # Clean up old augmented files before starting fresh augmentation.
     # This prevents stale _rN.wav files from previous runs piling up.
-    _aug_re = re.compile(r"^clip_\d{6}_r\d+\.wav$")
     for split in ["positive_train", "positive_test", "negative_train", "negative_test"]:
         clip_dir = model_dir / split
         if not clip_dir.exists():
             continue
-        old_augs = [p for p in clip_dir.glob("*.wav") if _aug_re.match(p.name)]
+        old_augs = [p for p in clip_dir.glob("*.wav") if _AUGMENTED_CLIP_RE.match(p.name)]
         if old_augs:
             logger.info(f"Cleaning {len(old_augs)} old augmented files from {split}")
             for p in old_augs:
@@ -241,9 +243,7 @@ def _augment_directory(
 
     target_length = int(target_duration_s * sample_rate)
     # Only read original clips (clip_000000.wav) — exclude augmented variants (clip_000000_r1.wav)
-    import re
-    _orig_re = re.compile(r"^clip_\d{6}\.wav$")
-    wav_files = sorted(p for p in clip_dir.glob("*.wav") if _orig_re.match(p.name))
+    wav_files = sorted(p for p in clip_dir.glob("*.wav") if _ORIGINAL_CLIP_RE.match(p.name))
 
     for wav_path in tqdm(wav_files, desc=f"Augmenting {clip_dir.name}", unit="clip"):
         audio, sr = sf.read(str(wav_path))
