@@ -43,3 +43,20 @@ htmlcov/
 
 # Claude Configs
 .claude/
+
+# Swift / SwiftPM / Xcode
+.build/
+.swiftpm/
+Packages/
+Package.resolved
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/
+xcuserdata/
+DerivedData/
+*.xcuserstate
+*.xcscmblueprint
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM

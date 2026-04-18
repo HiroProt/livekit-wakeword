@@ -36,6 +36,20 @@ livekit-wakeword export configs/hey_jarvis.yaml --quantize
 
 `run_export()` loads the trained model from `output/<model_name>/<model_name>.pt`, exports it to ONNX, and optionally quantizes it. Raises `FileNotFoundError` if the trained model doesn't exist.
 
+## Core ML Export (Apple platforms)
+
+For iOS / macOS deployments you can export to Core ML `.mlpackage` in addition to (or instead of) ONNX. Install the `coreml` extra, then pass `--format` to the export CLI:
+
+```bash
+pip install 'livekit-wakeword[coreml]'
+
+livekit-wakeword export configs/prod.yaml --format coreml       # just Core ML
+livekit-wakeword export configs/prod.yaml --format both          # ONNX + Core ML
+livekit-wakeword export configs/prod.yaml --format coreml --fp32 # fp32 weights (tighter parity, no ANE)
+```
+
+The output lands at `output/<model_name>/<model_name>.mlpackage` alongside the ONNX file. See [Core ML Export (Apple)](coreml-export.md) for the full conversion pipeline, frontend model regeneration, Swift package integration, and benchmarks.
+
 ## Inference API
 
 **Source:** `src/livekit/wakeword/inference/model.py`, `src/livekit/wakeword/inference/listener.py`

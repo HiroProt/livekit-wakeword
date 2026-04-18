@@ -317,17 +317,40 @@ def train(
 @app.command()
 def export(
     config_path: str = typer.Argument(..., help="Path to wake word config YAML"),
-    quantize: bool = typer.Option(False, "--quantize", help="Apply INT8 quantization"),
+    quantize: bool = typer.Option(False, "--quantize", help="Apply INT8 quantization (ONNX only)"),
+    format: str = typer.Option(
+        "onnx",
+        "--format",
+        "-f",
+        help="Export format: onnx, coreml, or both",
+        case_sensitive=False,
+    ),
+    fp32: bool = typer.Option(
+        False,
+        "--fp32",
+        help="Keep Core ML weights in float32 (defaults to float16)",
+    ),
 ) -> None:
-    """Export trained model to ONNX (optionally quantize for embedded)."""
+    """Export trained model to ONNX and/or Core ML."""
     config = load_config(config_path)
 
-    logger.info(f"Exporting '{config.model_name}' to ONNX...")
+    fmt = format.lower()
+    if fmt not in {"onnx", "coreml", "both"}:
+        raise typer.BadParameter("--format must be one of: onnx, coreml, both")
 
-    from .export.onnx import run_export
+    if fmt in {"onnx", "both"}:
+        logger.info(f"Exporting '{config.model_name}' to ONNX...")
+        from .export.onnx import run_export
 
-    onnx_path = run_export(config, quantize=quantize)
-    logger.info(f"Export complete! ONNX model at {onnx_path}")
+        onnx_path = run_export(config, quantize=quantize)
+        logger.info(f"ONNX export complete! Model at {onnx_path}")
+
+    if fmt in {"coreml", "both"}:
+        logger.info(f"Exporting '{config.model_name}' to Core ML...")
+        from .export.coreml import run_export_coreml
+
+        mlpackage_path = run_export_coreml(config, fp32=fp32)
+        logger.info(f"Core ML export complete! Model at {mlpackage_path}")
 
 
 @app.command()

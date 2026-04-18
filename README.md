@@ -183,6 +183,42 @@ if scores["hey_livekit"] > 0.5 {
 
 The mel spectrogram and speech embedding models are compiled into the binary; only the wake word classifier ONNX file is loaded at runtime. Audio at supported sample rates (22050–384000 Hz) is automatically resampled to 16 kHz.
 
+### Swift (iOS / macOS, Core ML)
+
+For Apple platforms, use the native **LiveKitWakeWord** Swift package. It runs the full pipeline (mel → embedding → classifier) on Core ML so inference can schedule on the Apple Neural Engine / GPU / CPU automatically, with no ONNX runtime dependency. Requires iOS 16 / macOS 13 and Swift 5.9.
+
+```swift
+// Package.swift
+dependencies: [
+    .package(url: "https://github.com/livekit/livekit-wakeword", branch: "main")
+]
+```
+
+```swift
+import LiveKitWakeWord
+
+// Stateless model: give it PCM, get back per-classifier scores.
+let classifier = Bundle.main.url(forResource: "hey_livekit", withExtension: "mlpackage")!
+let model = try WakeWordModel(
+    classifiers: [classifier],
+    sampleRate: 48_000,           // hardware rate; the model resamples internally
+    computeUnits: .all            // .all | .cpuAndGPU | .cpuOnly
+)
+let scores = try model.predict(pcmInt16)
+if (scores["hey_livekit"] ?? 0) > 0.5 { print("Detected!") }
+
+// Or drive AVAudioEngine end-to-end with a listener:
+let listener = WakeWordListener(model: model, threshold: 0.5, debounce: 2.0)
+try await listener.start()
+for await detection in listener.detections() {
+    print("\(detection.name): \(detection.confidence)")
+}
+```
+
+The mel spectrogram and speech embedding `.mlpackage` files are bundled with the Swift package; apps only ship their trained classifier. See [docs/coreml-export.md](docs/coreml-export.md) for how to convert existing ONNX classifiers to Core ML, and for ANE/GPU/CPU benchmarks.
+
+A runnable SwiftUI demo (iOS + macOS) lives in [examples/ios_wakeword/](examples/ios_wakeword/) — open `WakewordDemo.xcodeproj`, run the `WakewordDemoMac` scheme, and say "Hey LiveKit".
+
 ## Training a Custom Wake Word
 
 ### CLI quick start
@@ -358,6 +394,7 @@ sky launch skypilot/train.yaml
 - [Feature Extraction](docs/feature-extraction.md): mel spectrograms and embeddings
 - [Training](docs/training.md): 3-phase training and checkpoint averaging
 - [Export & Inference](docs/export-and-inference.md): ONNX export and Python API
+- [Core ML Export (Apple)](docs/coreml-export.md): iOS/macOS export, Swift package, benchmarks
 - [Evaluation](docs/evaluation.md): DET curves, AUT, and model comparison
 
 ## License
