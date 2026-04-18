@@ -12,7 +12,7 @@ models. Classifier `.mlpackage` files are typically 300–1000 KB.
 **Source:**
 - `src/livekit/wakeword/export/coreml.py` — Python export
 - `swift/` — Swift Package (`LiveKitWakeWord`)
-- `examples/ios_wakeword/` — iOS + macOS demo app (under `rust-sdks/examples/`)
+- `examples/ios_wakeword/` — iOS + macOS demo app
 
 ## Requirements
 
