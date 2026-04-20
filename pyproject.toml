@@ -64,12 +64,6 @@ export = [
     "onnxruntime>=1.17",
     "onnxscript>=0.6.2",
 ]
-coreml = [
-    "coremltools>=8.0",
-    "onnx2torch>=1.5",
-    "onnx>=1.15",
-    "torch>=2.5",
-]
 [project.urls]
 Homepage = "https://github.com/livekit/livekit-wakeword"
 Repository = "https://github.com/livekit/livekit-wakeword"

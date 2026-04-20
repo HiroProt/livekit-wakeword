@@ -394,7 +394,6 @@ sky launch skypilot/train.yaml
 - [Feature Extraction](docs/feature-extraction.md): mel spectrograms and embeddings
 - [Training](docs/training.md): 3-phase training and checkpoint averaging
 - [Export & Inference](docs/export-and-inference.md): ONNX export and Python API
-- [Core ML Export (Apple)](docs/coreml-export.md): iOS/macOS export, Swift package, benchmarks
 - [Evaluation](docs/evaluation.md): DET curves, AUT, and model comparison
 
 ## License

@@ -62,7 +62,6 @@ Raw audio (16kHz) → MelSpectrogramFrontend (ONNX) → SpeechEmbedding (ONNX) �
   - `trainer.py` — `WakeWordTrainer` with 3-phase training (full → refinement → fine-tuning), hard example mining, adaptive negative weighting, checkpoint averaging
   - `metrics.py` — FPPH (false positives per hour), recall, balanced accuracy
 - **`export/onnx.py`** — Export classifier to ONNX with optional INT8 quantization
-- **`export/coreml.py`** — Export classifier (plus optional regeneration of mel/embedding frontends) to Core ML `.mlpackage`; used by `livekit-wakeword export --format coreml` and by the Swift package's resource-regeneration path
 - **`inference/`**
   - `model.py` — `WakeWordModel` class for simple prediction API
   - `listener.py` — `WakeWordListener` class for async microphone detection
@@ -88,7 +87,6 @@ For detailed documentation on each pipeline stage, see `docs/`:
 - [docs/feature-extraction.md](docs/feature-extraction.md) — Mel spectrograms and embeddings
 - [docs/training.md](docs/training.md) — 3-phase training and checkpoint averaging
 - [docs/export-and-inference.md](docs/export-and-inference.md) — ONNX export and Python API
-- [docs/coreml-export.md](docs/coreml-export.md) — Core ML export (Apple), Swift package, benchmarks
 
 ## Code Style
 
