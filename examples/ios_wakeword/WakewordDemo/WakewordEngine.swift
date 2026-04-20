@@ -13,42 +13,44 @@
 // limitations under the License.
 
 @preconcurrency import AVFoundation
-import CoreML
 import Foundation
 import LiveKitWakeWord
 import SwiftUI
 
-/// User-selectable Core ML backend. Mirrors `MLComputeUnits`, but is its own
-/// enum so SwiftUI can render it and it can be `Sendable`.
+/// User-selectable ONNX Runtime execution provider. Wraps
+/// ``LiveKitWakeWord/ExecutionProvider`` in a SwiftUI-friendly `Identifiable`
+/// enum so the ``Picker`` can render it.
 enum ComputeBackend: String, CaseIterable, Identifiable, Sendable {
-    case all
-    case cpuAndGPU
-    case cpuOnly
+    case coreML
+    case coreMLCPUAndGPU
+    case coreMLCPUOnly
+    case cpu
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
-        case .all: return "ANE + GPU + CPU"
-        case .cpuAndGPU: return "GPU + CPU"
-        case .cpuOnly: return "CPU only"
+        case .coreML: return "CoreML (ANE+GPU+CPU)"
+        case .coreMLCPUAndGPU: return "CoreML (GPU+CPU)"
+        case .coreMLCPUOnly: return "CoreML (CPU)"
+        case .cpu: return "ORT CPU"
         }
     }
 
-    var mlComputeUnits: MLComputeUnits {
+    var executionProvider: ExecutionProvider {
         switch self {
-        case .all: return .all
-        case .cpuAndGPU: return .cpuAndGPU
-        case .cpuOnly: return .cpuOnly
+        case .coreML: return .coreML
+        case .coreMLCPUAndGPU: return .coreMLCPUAndGPU
+        case .coreMLCPUOnly: return .coreMLCPUOnly
+        case .cpu: return .cpu
         }
     }
 }
 
 /// Drives the microphone and runs wake-word inference on rolling 2-second windows.
 ///
-/// Migrated from the Rust UniFFI-backed `WakeWordDetector` to
-/// ``LiveKitWakeWord.WakeWordModel`` (pure Core ML). The shape of the public
-/// API consumed by the UI is unchanged.
+/// Uses ``LiveKitWakeWord.WakeWordModel`` (ONNX Runtime + CoreML EP) under
+/// the hood. Shape of the public API consumed by the UI is stable.
 ///
 /// Design:
 /// - `AVAudioEngine` taps the input node on the real-time audio thread.
@@ -68,7 +70,7 @@ final class WakewordEngine: ObservableObject, @unchecked Sendable {
     @Published private(set) var lastError: String?
     @Published private(set) var volume: Float = 0
     @Published private(set) var tick: UInt64 = 0
-    @Published var backend: ComputeBackend = .all {
+    @Published var backend: ComputeBackend = .coreML {
         didSet {
             guard oldValue != backend else { return }
             Task { @MainActor in self.rebuildModel() }
@@ -82,11 +84,11 @@ final class WakewordEngine: ObservableObject, @unchecked Sendable {
     private let predictInterval: CFAbsoluteTime = 0.02
     private let windowSeconds: Double = 2.0
 
-    // MARK: - Core ML model
+    // MARK: - Wake-word model
 
     private let classifierURLs: [URL]
     /// Current `WakeWordModel` instance. Rebuilt when the user changes the
-    /// compute-unit backend or the hardware sample rate, otherwise reused.
+    /// execution provider or the hardware sample rate, otherwise reused.
     private var model: WakeWordModel?
     private var modelSampleRate: UInt32 = 0
 
@@ -109,27 +111,14 @@ final class WakewordEngine: ObservableObject, @unchecked Sendable {
     // MARK: - Init
 
     init() throws {
-        // App targets compile `.mlpackage` resources to `.mlmodelc` at build
-        // time, but SPM consumers may ship the uncompiled `.mlpackage`
-        // (LiveKitWakeWord handles that case via runtime compilation). Look
-        // for either extension so this engine works in both shapes.
-        guard let url = Self.locateClassifier(named: "hey_livekit") else {
+        guard let url = Bundle.main.url(forResource: "hey_livekit", withExtension: "onnx") else {
             throw NSError(
                 domain: "WakewordEngine",
                 code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "hey_livekit classifier not found in app bundle"]
+                userInfo: [NSLocalizedDescriptionKey: "hey_livekit.onnx classifier not found in app bundle"]
             )
         }
         self.classifierURLs = [url]
-    }
-
-    private static func locateClassifier(named name: String) -> URL? {
-        for ext in ["mlmodelc", "mlpackage"] {
-            if let url = Bundle.main.url(forResource: name, withExtension: ext) {
-                return url
-            }
-        }
-        return nil
     }
 
     // MARK: - Public API
@@ -210,7 +199,7 @@ final class WakewordEngine: ObservableObject, @unchecked Sendable {
             model = try WakeWordModel(
                 classifiers: classifierURLs,
                 sampleRate: hwRate,
-                computeUnits: backend.mlComputeUnits
+                executionProvider: backend.executionProvider
             )
             modelSampleRate = hwRate
             let ringSize = max(Int(hwFormat.sampleRate * windowSeconds), 1)
@@ -290,9 +279,9 @@ final class WakewordEngine: ObservableObject, @unchecked Sendable {
         triggerResetTask = nil
     }
 
-    /// Rebuild the Core ML model to pick up a new ``ComputeBackend``. Invoked
-    /// from ``backend``'s `didSet`. If we're currently running, we quickly
-    /// cycle the audio engine so the new model picks up the next tap.
+    /// Rebuild the model to pick up a new ``ComputeBackend``. Invoked from
+    /// ``backend``'s `didSet`. If we're currently running, we quickly cycle
+    /// the audio engine so the new model picks up the next tap.
     @MainActor
     private func rebuildModel() {
         let wasRunning = isRunning
@@ -473,7 +462,7 @@ final class WakewordEngine: ObservableObject, @unchecked Sendable {
 }
 
 // Expose a read-only view of whether a model is currently loaded so tests or
-// debug UIs can observe readiness without touching the Core ML model directly.
+// debug UIs can observe readiness without touching the ML model directly.
 extension WakewordEngine {
     /// `nil` when no model has been built yet (e.g. the user has not pressed
     /// "Unmute mic" since launch / since the backend changed).

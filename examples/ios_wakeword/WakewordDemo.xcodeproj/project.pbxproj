@@ -9,13 +9,13 @@
 /* Begin PBXBuildFile section */
 		05719E94681D8D5B0FD8FA1D /* WakewordEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8206EA4B0BBC90A47E5F1C9 /* WakewordEngine.swift */; };
 		2D2EB5EBD8427B3971F0EDB4 /* WakewordDemoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 531722556659D603FBDBF80C /* WakewordDemoApp.swift */; };
-		3D6E0D9E26BC93F21E401E9F /* hey_livekit.mlpackage in Sources */ = {isa = PBXBuildFile; fileRef = A0C09DD31D24C9FB109CEF9A /* hey_livekit.mlpackage */; };
 		5F662C664E3FA009C4050852 /* WakewordDemoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 531722556659D603FBDBF80C /* WakewordDemoApp.swift */; };
 		64253D7B3BAD5CC68FFEB2D9 /* LiveKitWakeWord in Frameworks */ = {isa = PBXBuildFile; productRef = 7542EDD0A29839D1BA0181E3 /* LiveKitWakeWord */; };
+		8696DB4A2BC5CA4CB27AF405 /* hey_livekit.onnx in Resources */ = {isa = PBXBuildFile; fileRef = E21131482596097F6DCF52DD /* hey_livekit.onnx */; };
 		9CBF8B77A9DD9144D0264E3A /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29F11384EFE2A90A31C81C71 /* ContentView.swift */; };
 		9D683EF826234BA2BFF1C4D0 /* LiveKitWakeWord in Frameworks */ = {isa = PBXBuildFile; productRef = FC8CD48474B8BE598F34F344 /* LiveKitWakeWord */; };
 		A9B4BB43E681AFBEF7B04849 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29F11384EFE2A90A31C81C71 /* ContentView.swift */; };
-		CECA3FC20741AA0E56602059 /* hey_livekit.mlpackage in Sources */ = {isa = PBXBuildFile; fileRef = A0C09DD31D24C9FB109CEF9A /* hey_livekit.mlpackage */; };
+		E2B02B5C115E6A8C7CEE24AC /* hey_livekit.onnx in Resources */ = {isa = PBXBuildFile; fileRef = E21131482596097F6DCF52DD /* hey_livekit.onnx */; };
 		E744FEFF88D8F21580E29A4B /* WakewordEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8206EA4B0BBC90A47E5F1C9 /* WakewordEngine.swift */; };
 /* End PBXBuildFile section */
 
@@ -24,9 +24,9 @@
 		531722556659D603FBDBF80C /* WakewordDemoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WakewordDemoApp.swift; sourceTree = "<group>"; };
 		6144737F06FDEECB4D48D018 /* WakewordDemo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = WakewordDemo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		9FE13A6A9757223829FD8591 /* swift */ = {isa = PBXFileReference; lastKnownFileType = folder; name = swift; path = ../../swift; sourceTree = SOURCE_ROOT; };
-		A0C09DD31D24C9FB109CEF9A /* hey_livekit.mlpackage */ = {isa = PBXFileReference; path = hey_livekit.mlpackage; sourceTree = "<group>"; };
 		C8206EA4B0BBC90A47E5F1C9 /* WakewordEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WakewordEngine.swift; sourceTree = "<group>"; };
 		DB0F77E741E377746B89C9C5 /* WakewordDemoMac.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WakewordDemoMac.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E21131482596097F6DCF52DD /* hey_livekit.onnx */ = {isa = PBXFileReference; path = hey_livekit.onnx; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -52,7 +52,7 @@
 		432C23A1F68BF143066C7230 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
-				A0C09DD31D24C9FB109CEF9A /* hey_livekit.mlpackage */,
+				E21131482596097F6DCF52DD /* hey_livekit.onnx */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -102,6 +102,7 @@
 			buildConfigurationList = 6608EC3D138EA2DB9CCFB8E3 /* Build configuration list for PBXNativeTarget "WakewordDemo" */;
 			buildPhases = (
 				D5E2489BCD261391897D0B0D /* Sources */,
+				582908EC9FEEFD7FA230765F /* Resources */,
 				91D5C90738F96596CD38DF24 /* Frameworks */,
 			);
 			buildRules = (
@@ -121,6 +122,7 @@
 			buildConfigurationList = 40B8774F81A28391FF15BB00 /* Build configuration list for PBXNativeTarget "WakewordDemoMac" */;
 			buildPhases = (
 				D41F9E4C3FF1F2233899571E /* Sources */,
+				1B810AF7F209B6C3645603EA /* Resources */,
 				9E6D5AB6DC32A1E402D9014D /* Frameworks */,
 			);
 			buildRules = (
@@ -169,6 +171,25 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXResourcesBuildPhase section */
+		1B810AF7F209B6C3645603EA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E2B02B5C115E6A8C7CEE24AC /* hey_livekit.onnx in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		582908EC9FEEFD7FA230765F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8696DB4A2BC5CA4CB27AF405 /* hey_livekit.onnx in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		D41F9E4C3FF1F2233899571E /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -177,7 +198,6 @@
 				A9B4BB43E681AFBEF7B04849 /* ContentView.swift in Sources */,
 				2D2EB5EBD8427B3971F0EDB4 /* WakewordDemoApp.swift in Sources */,
 				E744FEFF88D8F21580E29A4B /* WakewordEngine.swift in Sources */,
-				3D6E0D9E26BC93F21E401E9F /* hey_livekit.mlpackage in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -188,7 +208,6 @@
 				9CBF8B77A9DD9144D0264E3A /* ContentView.swift in Sources */,
 				5F662C664E3FA009C4050852 /* WakewordDemoApp.swift in Sources */,
 				05719E94681D8D5B0FD8FA1D /* WakewordEngine.swift in Sources */,
-				CECA3FC20741AA0E56602059 /* hey_livekit.mlpackage in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -208,7 +227,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.livekit.example.WakewordDemoMac;
 				PRODUCT_NAME = WakewordDemo;
 				SDKROOT = macosx;
@@ -268,7 +287,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 0.1.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -311,7 +330,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				PRODUCT_BUNDLE_IDENTIFIER = io.livekit.example.WakewordDemoMac;
 				PRODUCT_NAME = WakewordDemo;
 				SDKROOT = macosx;
@@ -383,7 +402,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 0.1.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
