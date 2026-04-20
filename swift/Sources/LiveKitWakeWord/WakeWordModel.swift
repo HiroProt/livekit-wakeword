@@ -62,17 +62,21 @@ public final class WakeWordModel: @unchecked Sendable {
 
     /// Create a detector with the given classifier models loaded up front.
     ///
+    /// Mirrors the Rust crate's `WakeWordModel::new(&[paths], sample_rate)`
+    /// signature — `sampleRate` is the rate of audio you'll feed into
+    /// ``predict(_:)``. Anything other than 16 kHz is resampled to the
+    /// mel model's native 16 kHz internally via ``AVAudioConverter``.
+    ///
     /// - Parameters:
     ///   - models: URLs of `.onnx` classifier files. Each file's name
     ///     (minus the extension) is used as the key returned by
     ///     ``predict(_:)``.
     ///   - sampleRate: Sample rate of the PCM the caller will feed in.
-    ///     Anything other than 16 kHz is resampled internally.
     ///   - executionProvider: Which ONNX Runtime execution provider to use.
     ///     Defaults to ``ExecutionProvider/coreML`` (ANE + GPU + CPU).
     public init(
-        models modelURLs: [URL] = [],
-        sampleRate: UInt32 = 16_000,
+        models modelURLs: [URL],
+        sampleRate: UInt32,
         executionProvider: ExecutionProvider = .coreML
     ) throws {
         self.sampleRate = sampleRate

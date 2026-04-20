@@ -200,6 +200,7 @@ final class WakewordEngine: ObservableObject, @unchecked Sendable {
         if model == nil {
             model = try WakeWordModel(
                 models: classifierURLs,
+                sampleRate: WakeWordModel.modelSampleRate,
                 executionProvider: backend.executionProvider
             )
         }

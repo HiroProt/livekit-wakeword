@@ -91,7 +91,7 @@ final class WakeWordModelTests: XCTestCase {
 
     func testLoadAndUnloadClassifier() throws {
         let classifier = try fixtureURL("hey_livekit.onnx")
-        let model = try WakeWordModel(sampleRate: 16_000, executionProvider: .cpu)
+        let model = try WakeWordModel(models: [], sampleRate: 16_000, executionProvider: .cpu)
         XCTAssertEqual(model.modelNames.count, 0)
 
         try model.loadModel(url: classifier, name: "custom")

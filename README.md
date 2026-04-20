@@ -198,9 +198,9 @@ For Swift applications on iOS 16+ / macOS 14+, add the [`LiveKitWakeWord`](swift
 import LiveKitWakeWord
 
 let classifier = Bundle.main.url(forResource: "hey_livekit", withExtension: "onnx")!
-let model = try WakeWordModel(models: [classifier])
+let model = try WakeWordModel(models: [classifier], sampleRate: 16_000)
 
-// Feed ~2 s PCM chunks (Int16, at 16 kHz):
+// Feed ~2 s PCM chunks (Int16, at the configured sample rate):
 let scores = try model.predict(audioChunk)
 if (scores["hey_livekit"] ?? 0) > 0.5 {
     print("Wake word detected!")
@@ -213,7 +213,7 @@ if (scores["hey_livekit"] ?? 0) > 0.5 {
 import LiveKitWakeWord
 
 let classifier = Bundle.main.url(forResource: "hey_livekit", withExtension: "onnx")!
-let model = try WakeWordModel(models: [classifier])
+let model = try WakeWordModel(models: [classifier], sampleRate: 16_000)
 let listener = WakeWordListener(model: model, threshold: 0.5, debounce: 2.0)
 
 try await listener.start()
@@ -222,7 +222,7 @@ for await detection in listener.detections() {
 }
 ```
 
-The mel spectrogram and speech embedding `.onnx` models ship inside the Swift package; only the classifier ships with your app. Audio at any sample rate (pass `sampleRate:` to `WakeWordModel`) is resampled to 16 kHz via `AVAudioConverter`, and the listener handles mic-hardware resampling automatically. ONNX Runtime with the CoreML Execution Provider dispatches to ANE / GPU / CPU by default (override via `executionProvider:`).
+The mel spectrogram and speech embedding `.onnx` models ship inside the Swift package; only the classifier ships with your app. Audio at any sample rate is resampled to 16 kHz internally via `AVAudioConverter` (matches the Rust crate's 22050–384000 Hz input range); the listener handles mic-hardware resampling automatically. ONNX Runtime with the CoreML Execution Provider dispatches to ANE / GPU / CPU by default (override via `executionProvider:`).
 
 Add `NSMicrophoneUsageDescription` to Info.plist (and `com.apple.security.device.audio-input` on sandboxed macOS apps) for listener use. A runnable SwiftUI demo (iOS + macOS) lives in [examples/ios_wakeword/](examples/ios_wakeword/).
 
