@@ -87,10 +87,9 @@ final class WakewordEngine: ObservableObject, @unchecked Sendable {
     // MARK: - Wake-word model
 
     private let classifierURLs: [URL]
-    /// Current `WakeWordModel` instance. Rebuilt when the user changes the
-    /// execution provider or the hardware sample rate, otherwise reused.
+    /// Current `WakeWordModel` instance. Rebuilt only when the user changes
+    /// the execution provider.
     private var model: WakeWordModel?
-    private var modelSampleRate: UInt32 = 0
 
     // MARK: - Audio capture
 
@@ -194,34 +193,31 @@ final class WakewordEngine: ObservableObject, @unchecked Sendable {
             )
         }
 
-        let hwRate = UInt32(hwFormat.sampleRate)
-        if model == nil || modelSampleRate != hwRate {
+        // Build the model once per compute-backend choice. The model is
+        // at 16 kHz (default); the AVAudioConverter below resamples the
+        // hardware stream down so the model always receives the rate it
+        // declares regardless of what the mic gives us.
+        if model == nil {
             model = try WakeWordModel(
-                classifiers: classifierURLs,
-                sampleRate: hwRate,
+                models: classifierURLs,
                 executionProvider: backend.executionProvider
             )
-            modelSampleRate = hwRate
-            let ringSize = max(Int(hwFormat.sampleRate * windowSeconds), 1)
-            ringLock.lock()
-            ring = [Int16](repeating: 0, count: ringSize)
-            writeIdx = 0
-            samplesWritten = 0
-            lastPredictAt = 0
-            predictInFlight = false
-            ringLock.unlock()
-        } else {
-            ringLock.lock()
-            writeIdx = 0
-            samplesWritten = 0
-            lastPredictAt = 0
-            predictInFlight = false
-            ringLock.unlock()
         }
+        let modelRate = Double(WakeWordModel.modelSampleRate)
+        let ringSize = max(Int(modelRate * windowSeconds), 1)
+        ringLock.lock()
+        if ring.count != ringSize {
+            ring = [Int16](repeating: 0, count: ringSize)
+        }
+        writeIdx = 0
+        samplesWritten = 0
+        lastPredictAt = 0
+        predictInFlight = false
+        ringLock.unlock()
 
         guard let targetFormat = AVAudioFormat(
             commonFormat: .pcmFormatInt16,
-            sampleRate: hwFormat.sampleRate,
+            sampleRate: modelRate,
             channels: 1,
             interleaved: true
         ) else {
@@ -289,7 +285,6 @@ final class WakewordEngine: ObservableObject, @unchecked Sendable {
             stopInternal()
         }
         model = nil
-        modelSampleRate = 0
         if wasRunning {
             Task { await self.startAfterAuth() }
         }
@@ -464,9 +459,7 @@ final class WakewordEngine: ObservableObject, @unchecked Sendable {
 // Expose a read-only view of whether a model is currently loaded so tests or
 // debug UIs can observe readiness without touching the ML model directly.
 extension WakewordEngine {
-    /// `nil` when no model has been built yet (e.g. the user has not pressed
-    /// "Unmute mic" since launch / since the backend changed).
-    var modelLoadedSampleRate: UInt32? {
-        model == nil ? nil : modelSampleRate
-    }
+    /// `true` once a `WakeWordModel` has been built (first mic activation
+    /// after launch / after the backend changed).
+    var isModelLoaded: Bool { model != nil }
 }

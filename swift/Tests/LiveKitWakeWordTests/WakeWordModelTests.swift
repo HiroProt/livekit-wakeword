@@ -35,7 +35,7 @@ final class WakeWordModelTests: XCTestCase {
     func testPredictPipelineShape() throws {
         let classifier = try fixtureURL("hey_livekit.onnx")
         let model = try WakeWordModel(
-            classifiers: [classifier],
+            models: [classifier],
             sampleRate: 16_000,
             executionProvider: .cpu
         )
@@ -59,7 +59,7 @@ final class WakeWordModelTests: XCTestCase {
         let (sampleRate, samples) = try Self.readWav(url: wav)
 
         let model = try WakeWordModel(
-            classifiers: [classifier],
+            models: [classifier],
             sampleRate: sampleRate,
             executionProvider: .cpu
         )
@@ -77,7 +77,7 @@ final class WakeWordModelTests: XCTestCase {
         let (sampleRate, samples) = try Self.readWav(url: wav)
 
         let model = try WakeWordModel(
-            classifiers: [classifier],
+            models: [classifier],
             sampleRate: sampleRate,
             executionProvider: .cpu
         )
@@ -92,18 +92,18 @@ final class WakeWordModelTests: XCTestCase {
     func testLoadAndUnloadClassifier() throws {
         let classifier = try fixtureURL("hey_livekit.onnx")
         let model = try WakeWordModel(sampleRate: 16_000, executionProvider: .cpu)
-        XCTAssertEqual(model.classifierNames.count, 0)
+        XCTAssertEqual(model.modelNames.count, 0)
 
-        try model.loadClassifier(url: classifier, name: "custom")
-        XCTAssertEqual(model.classifierNames, ["custom"])
+        try model.loadModel(url: classifier, name: "custom")
+        XCTAssertEqual(model.modelNames, ["custom"])
 
         let audio = Self.generateSine(freq: 440, sampleRate: 16_000, duration: 2.0)
         let scores = try model.predict(audio)
         XCTAssertNotNil(scores["custom"])
         XCTAssertNil(scores["hey_livekit"])
 
-        XCTAssertTrue(model.unloadClassifier(name: "custom"))
-        XCTAssertEqual(model.classifierNames.count, 0)
+        XCTAssertTrue(model.unloadModel(name: "custom"))
+        XCTAssertEqual(model.modelNames.count, 0)
     }
 
     // MARK: - Helpers

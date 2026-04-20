@@ -49,7 +49,6 @@ public actor WakeWordListener {
     private var converter: AVAudioConverter?
     private var targetFormat: AVAudioFormat?
 
-    private var hardwareSampleRate: Double = 0
     private var ringBuffer: [Int16] = []
     private var writeIndex: Int = 0
     private var samplesWritten: Int = 0
@@ -102,20 +101,25 @@ public actor WakeWordListener {
             throw WakeWordError.unsupportedSampleRate(rate: 0)
         }
 
+        // Target the model's declared sample rate so the model receives
+        // exactly what it expects regardless of what the mic hardware gives
+        // us. AVAudioConverter does the resampling from hwFormat when they
+        // differ; if hwRate == model.sampleRate it's a plain F32→Int16
+        // conversion with no resample.
+        let modelRate = Double(model.sampleRate)
         guard let targetFormat = AVAudioFormat(
             commonFormat: .pcmFormatInt16,
-            sampleRate: hwFormat.sampleRate,
+            sampleRate: modelRate,
             channels: 1,
             interleaved: true
         ) else {
-            throw WakeWordError.unsupportedSampleRate(rate: UInt32(hwFormat.sampleRate))
+            throw WakeWordError.unsupportedSampleRate(rate: model.sampleRate)
         }
         guard let converter = AVAudioConverter(from: hwFormat, to: targetFormat) else {
             throw WakeWordError.unsupportedSampleRate(rate: UInt32(hwFormat.sampleRate))
         }
 
-        hardwareSampleRate = hwFormat.sampleRate
-        let ringSize = max(Int(hwFormat.sampleRate * windowSeconds), 1)
+        let ringSize = max(Int(modelRate * windowSeconds), 1)
         ringBuffer = [Int16](repeating: 0, count: ringSize)
         writeIndex = 0
         samplesWritten = 0
@@ -254,9 +258,16 @@ public actor WakeWordListener {
         converter: AVAudioConverter,
         targetFormat: AVAudioFormat
     ) -> [Int16]? {
+        // Size the output for the resampled rate. When targetFormat's
+        // sample rate matches the input, the ratio is 1. When resampling
+        // down (e.g. 48k→16k) we need 1/3 of the input frames; up we need
+        // more. +8 frames of slack accounts for AVAudioConverter's
+        // internal alignment.
+        let ratio = targetFormat.sampleRate / inputBuffer.format.sampleRate
+        let outCapacity = AVAudioFrameCount(ceil(Double(inputBuffer.frameLength) * ratio)) + 8
         guard let outBuffer = AVAudioPCMBuffer(
             pcmFormat: targetFormat,
-            frameCapacity: inputBuffer.frameCapacity
+            frameCapacity: outCapacity
         ) else { return nil }
         var consumed = false
         var error: NSError?

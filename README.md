@@ -183,41 +183,48 @@ if scores["hey_livekit"] > 0.5 {
 
 The mel spectrogram and speech embedding models are compiled into the binary; only the wake word classifier ONNX file is loaded at runtime. Audio at supported sample rates (22050–384000 Hz) is automatically resampled to 16 kHz.
 
-### Swift (iOS / macOS, ONNX Runtime)
+### Swift
 
-For Apple platforms, use the native **LiveKitWakeWord** Swift package. It runs the full pipeline (mel → embedding → classifier) on [ONNX Runtime](https://onnxruntime.ai/), loading the same `.onnx` files the Python package ships. By default ORT's CoreML Execution Provider dispatches supported ops to ANE / GPU / CPU automatically. Requires iOS 16 / macOS 14 and Swift 5.9.
+For Swift applications on iOS 16+ / macOS 14+, add the [`LiveKitWakeWord`](swift) Swift package:
 
 ```swift
 // Package.swift
-dependencies: [
-    .package(url: "https://github.com/livekit/livekit-wakeword", branch: "main")
-]
+.package(url: "https://github.com/livekit/livekit-wakeword", branch: "main"),
 ```
+
+**Basic inference:**
 
 ```swift
 import LiveKitWakeWord
 
-// Stateless model: give it PCM, get back per-classifier scores.
 let classifier = Bundle.main.url(forResource: "hey_livekit", withExtension: "onnx")!
-let model = try WakeWordModel(
-    classifiers: [classifier],
-    sampleRate: 48_000,                     // hardware rate; the model resamples internally
-    executionProvider: .coreML              // .coreML | .coreMLCPUAndGPU | .coreMLCPUOnly | .cpu
-)
-let scores = try model.predict(pcmInt16)
-if (scores["hey_livekit"] ?? 0) > 0.5 { print("Detected!") }
+let model = try WakeWordModel(models: [classifier])
 
-// Or drive AVAudioEngine end-to-end with a listener:
-let listener = WakeWordListener(model: model, threshold: 0.5, debounce: 2.0)
-try await listener.start()
-for await detection in listener.detections() {
-    print("\(detection.name): \(detection.confidence)")
+// Feed ~2 s PCM chunks (Int16, at 16 kHz):
+let scores = try model.predict(audioChunk)
+if (scores["hey_livekit"] ?? 0) > 0.5 {
+    print("Wake word detected!")
 }
 ```
 
-The mel spectrogram and speech embedding `.onnx` models are bundled with the Swift package; apps only ship their trained classifier (exported via `livekit-wakeword export`). The ONNX Runtime framework is pulled in transitively via the [official Swift Package Manager distribution](https://github.com/microsoft/onnxruntime-swift-package-manager).
+**Async listener with microphone:**
 
-A runnable SwiftUI demo (iOS + macOS) lives in [examples/ios_wakeword/](examples/ios_wakeword/) — open `WakewordDemo.xcodeproj`, run the `WakewordDemoMac` scheme, and say "Hey LiveKit".
+```swift
+import LiveKitWakeWord
+
+let classifier = Bundle.main.url(forResource: "hey_livekit", withExtension: "onnx")!
+let model = try WakeWordModel(models: [classifier])
+let listener = WakeWordListener(model: model, threshold: 0.5, debounce: 2.0)
+
+try await listener.start()
+for await detection in listener.detections() {
+    print("Detected \(detection.name)! (confidence=\(String(format: "%.2f", detection.confidence)))")
+}
+```
+
+The mel spectrogram and speech embedding `.onnx` models ship inside the Swift package; only the classifier ships with your app. Audio at any sample rate (pass `sampleRate:` to `WakeWordModel`) is resampled to 16 kHz via `AVAudioConverter`, and the listener handles mic-hardware resampling automatically. ONNX Runtime with the CoreML Execution Provider dispatches to ANE / GPU / CPU by default (override via `executionProvider:`).
+
+Add `NSMicrophoneUsageDescription` to Info.plist (and `com.apple.security.device.audio-input` on sandboxed macOS apps) for listener use. A runnable SwiftUI demo (iOS + macOS) lives in [examples/ios_wakeword/](examples/ios_wakeword/).
 
 ## Training a Custom Wake Word
 

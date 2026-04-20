@@ -27,14 +27,15 @@ public enum ExecutionProvider: Sendable, Equatable {
     case cpu
 }
 
-/// Stateless wake-word detector — pass PCM audio, get back per-classifier
+/// Stateless wake-word detector — pass PCM audio, get back per-model
 /// confidence scores.
 ///
-/// Mirrors the semantics of the Python `WakeWordModel`: mel frontend →
-/// embedding CNN → one or more classifier heads. The two frontend models
-/// are bundled with the Swift package as `.onnx` files; classifier heads
-/// are loaded at runtime from disk so apps can ship multiple wake words or
-/// swap them without rebuilding the package.
+/// Matches the shape of the Python `WakeWordModel` and the Rust
+/// `livekit_wakeword::WakeWordModel`: mel frontend → embedding CNN → one
+/// or more classifier heads. The two frontend models are bundled with the
+/// Swift package as `.onnx` files; classifier heads are loaded at runtime
+/// from disk so apps can ship multiple wake words or swap them without
+/// rebuilding the package.
 ///
 /// `WakeWordModel` is `@unchecked Sendable`: the underlying ORT sessions
 /// are safe to share across queues, but successive calls to
@@ -42,6 +43,11 @@ public enum ExecutionProvider: Sendable, Equatable {
 /// Runtime session is not reentrant). Use ``WakeWordListener`` for the
 /// typical "tap the microphone and serialise inference" use case.
 public final class WakeWordModel: @unchecked Sendable {
+    /// Sample rate the frozen mel + embedding models were trained at.
+    /// Audio fed into the mel frontend is always at this rate; resampling
+    /// from any other rate happens transparently in ``init(models:sampleRate:executionProvider:)``.
+    public static let modelSampleRate: UInt32 = 16_000
+
     public let sampleRate: UInt32
     public let executionProvider: ExecutionProvider
 
@@ -51,13 +57,13 @@ public final class WakeWordModel: @unchecked Sendable {
     private let embedding: EmbeddingModel
     private let resampler: AudioResampler?
 
-    private let classifierLock = NSLock()
-    private var classifiers: [String: Classifier] = [:]
+    private let modelsLock = NSLock()
+    private var models: [String: Classifier] = [:]
 
-    /// Create a detector with ``classifierURLs`` loaded up front.
+    /// Create a detector with the given classifier models loaded up front.
     ///
     /// - Parameters:
-    ///   - classifiers: URLs of `.onnx` classifier files. Each file's name
+    ///   - models: URLs of `.onnx` classifier files. Each file's name
     ///     (minus the extension) is used as the key returned by
     ///     ``predict(_:)``.
     ///   - sampleRate: Sample rate of the PCM the caller will feed in.
@@ -65,7 +71,7 @@ public final class WakeWordModel: @unchecked Sendable {
     ///   - executionProvider: Which ONNX Runtime execution provider to use.
     ///     Defaults to ``ExecutionProvider/coreML`` (ANE + GPU + CPU).
     public init(
-        classifiers classifierURLs: [URL] = [],
+        models modelURLs: [URL] = [],
         sampleRate: UInt32 = 16_000,
         executionProvider: ExecutionProvider = .coreML
     ) throws {
@@ -79,18 +85,18 @@ public final class WakeWordModel: @unchecked Sendable {
             ? nil
             : try AudioResampler(inputSampleRate: sampleRate)
 
-        for url in classifierURLs {
-            try loadClassifier(url: url, name: nil)
+        for url in modelURLs {
+            try loadModel(url: url, name: nil)
         }
     }
 
-    /// Add a classifier to the set consulted on every ``predict(_:)``.
+    /// Add a classifier model to the set consulted on every ``predict(_:)``.
     ///
     /// - Parameters:
     ///   - url: Path to a `.onnx` classifier file.
     ///   - name: Optional key under which the result appears in the score
     ///     dictionary. Defaults to the filename stem.
-    public func loadClassifier(url: URL, name: String? = nil) throws {
+    public func loadModel(url: URL, name: String? = nil) throws {
         if !FileManager.default.fileExists(atPath: url.path) {
             throw WakeWordError.classifierNotFound(url: url)
         }
@@ -101,36 +107,36 @@ public final class WakeWordModel: @unchecked Sendable {
             env: env,
             options: sessionOptions
         )
-        classifierLock.lock()
-        classifiers[resolvedName] = classifier
-        classifierLock.unlock()
+        modelsLock.lock()
+        models[resolvedName] = classifier
+        modelsLock.unlock()
     }
 
-    /// Remove a classifier by name. Returns `true` if something was removed.
+    /// Remove a classifier model by name. Returns `true` if something was removed.
     @discardableResult
-    public func unloadClassifier(name: String) -> Bool {
-        classifierLock.lock()
-        let removed = classifiers.removeValue(forKey: name) != nil
-        classifierLock.unlock()
+    public func unloadModel(name: String) -> Bool {
+        modelsLock.lock()
+        let removed = models.removeValue(forKey: name) != nil
+        modelsLock.unlock()
         return removed
     }
 
-    /// Names of all currently loaded classifiers.
-    public var classifierNames: [String] {
-        classifierLock.lock()
-        defer { classifierLock.unlock() }
-        return Array(classifiers.keys)
+    /// Names of all currently loaded classifier models.
+    public var modelNames: [String] {
+        modelsLock.lock()
+        defer { modelsLock.unlock() }
+        return Array(models.keys)
     }
 
-    /// Predict wake-word confidence across all loaded classifiers.
+    /// Predict wake-word confidence across all loaded models.
     ///
     /// Pass ~2 s of audio. Shorter chunks that don't produce 16 sliding
-    /// embedding windows return 0 for every classifier (same semantics as
-    /// the Python reference implementation).
+    /// embedding windows return 0 for every model (same semantics as the
+    /// Python reference implementation).
     public func predict(_ pcm: UnsafeBufferPointer<Int16>) throws -> [String: Float] {
-        classifierLock.lock()
-        let snapshot = classifiers
-        classifierLock.unlock()
+        modelsLock.lock()
+        let snapshot = models
+        modelsLock.unlock()
         if snapshot.isEmpty { return [:] }
 
         let audio16k: [Float]
@@ -172,8 +178,8 @@ public final class WakeWordModel: @unchecked Sendable {
 
         var results = [String: Float]()
         results.reserveCapacity(snapshot.count)
-        for (name, classifier) in snapshot {
-            results[name] = try classifier.predict(embeddings: embeddings)
+        for (name, model) in snapshot {
+            results[name] = try model.predict(embeddings: embeddings)
         }
         return results
     }
@@ -221,10 +227,10 @@ public final class WakeWordModel: @unchecked Sendable {
         return out
     }
 
-    private static func zeroScores(_ classifiers: [String: Classifier]) -> [String: Float] {
+    private static func zeroScores(_ models: [String: Classifier]) -> [String: Float] {
         var d: [String: Float] = [:]
-        d.reserveCapacity(classifiers.count)
-        for k in classifiers.keys { d[k] = 0 }
+        d.reserveCapacity(models.count)
+        for k in models.keys { d[k] = 0 }
         return d
     }
 }

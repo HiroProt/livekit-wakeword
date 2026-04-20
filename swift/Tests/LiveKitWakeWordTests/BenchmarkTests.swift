@@ -55,7 +55,7 @@ final class BenchmarkTests: XCTestCase {
     private func runBenchmark(provider: ExecutionProvider, label: String) throws {
         let classifier = try fixtureURL("hey_livekit.onnx")
         let model = try WakeWordModel(
-            classifiers: [classifier],
+            models: [classifier],
             sampleRate: 16_000,
             executionProvider: provider
         )
