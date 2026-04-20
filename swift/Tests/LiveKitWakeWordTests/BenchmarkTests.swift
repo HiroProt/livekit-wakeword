@@ -6,15 +6,14 @@
 //
 //     http://www.apache.org/licenses/LICENSE-2.0
 
-import CoreML
 import Foundation
 import XCTest
 
 @testable import LiveKitWakeWord
 
-/// Micro-benchmarks for ``WakeWordModel/predict(_:)`` across the three
-/// compute-unit configurations. These are expensive, so they're guarded by
-/// the ``LIVEKIT_WAKEWORD_BENCH`` environment variable — set it to anything
+/// Micro-benchmarks for ``WakeWordModel/predict(_:)`` across execution
+/// providers. These are expensive, so they're guarded by the
+/// ``LIVEKIT_WAKEWORD_BENCH`` environment variable — set it to anything
 /// truthy when you want to run them:
 ///
 /// ```
@@ -38,27 +37,27 @@ final class BenchmarkTests: XCTestCase {
         }
     }
 
-    func testPredictPerformanceAll() throws {
+    func testPredictPerformanceCoreML() throws {
         try skipUnlessBenchmarkEnabled()
-        try runBenchmark(computeUnits: .all, label: "MLComputeUnits.all")
+        try runBenchmark(provider: .coreML, label: "coreML")
     }
 
-    func testPredictPerformanceCPUAndGPU() throws {
+    func testPredictPerformanceCoreMLCPUAndGPU() throws {
         try skipUnlessBenchmarkEnabled()
-        try runBenchmark(computeUnits: .cpuAndGPU, label: "MLComputeUnits.cpuAndGPU")
+        try runBenchmark(provider: .coreMLCPUAndGPU, label: "coreMLCPUAndGPU")
     }
 
-    func testPredictPerformanceCPUOnly() throws {
+    func testPredictPerformanceCPU() throws {
         try skipUnlessBenchmarkEnabled()
-        try runBenchmark(computeUnits: .cpuOnly, label: "MLComputeUnits.cpuOnly")
+        try runBenchmark(provider: .cpu, label: "cpu")
     }
 
-    private func runBenchmark(computeUnits: MLComputeUnits, label: String) throws {
-        let classifier = try fixtureURL("hey_livekit.mlpackage")
+    private func runBenchmark(provider: ExecutionProvider, label: String) throws {
+        let classifier = try fixtureURL("hey_livekit.onnx")
         let model = try WakeWordModel(
             classifiers: [classifier],
             sampleRate: 16_000,
-            computeUnits: computeUnits
+            executionProvider: provider
         )
 
         // 2-second audio chunk matches the usual window size fed by the

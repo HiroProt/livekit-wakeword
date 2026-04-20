@@ -183,9 +183,9 @@ if scores["hey_livekit"] > 0.5 {
 
 The mel spectrogram and speech embedding models are compiled into the binary; only the wake word classifier ONNX file is loaded at runtime. Audio at supported sample rates (22050–384000 Hz) is automatically resampled to 16 kHz.
 
-### Swift (iOS / macOS, Core ML)
+### Swift (iOS / macOS, ONNX Runtime)
 
-For Apple platforms, use the native **LiveKitWakeWord** Swift package. It runs the full pipeline (mel → embedding → classifier) on Core ML so inference can schedule on the Apple Neural Engine / GPU / CPU automatically, with no ONNX runtime dependency. Requires iOS 16 / macOS 13 and Swift 5.9.
+For Apple platforms, use the native **LiveKitWakeWord** Swift package. It runs the full pipeline (mel → embedding → classifier) on [ONNX Runtime](https://onnxruntime.ai/), loading the same `.onnx` files the Python package ships. By default ORT's CoreML Execution Provider dispatches supported ops to ANE / GPU / CPU automatically. Requires iOS 16 / macOS 14 and Swift 5.9.
 
 ```swift
 // Package.swift
@@ -198,11 +198,11 @@ dependencies: [
 import LiveKitWakeWord
 
 // Stateless model: give it PCM, get back per-classifier scores.
-let classifier = Bundle.main.url(forResource: "hey_livekit", withExtension: "mlpackage")!
+let classifier = Bundle.main.url(forResource: "hey_livekit", withExtension: "onnx")!
 let model = try WakeWordModel(
     classifiers: [classifier],
-    sampleRate: 48_000,           // hardware rate; the model resamples internally
-    computeUnits: .all            // .all | .cpuAndGPU | .cpuOnly
+    sampleRate: 48_000,                     // hardware rate; the model resamples internally
+    executionProvider: .coreML              // .coreML | .coreMLCPUAndGPU | .coreMLCPUOnly | .cpu
 )
 let scores = try model.predict(pcmInt16)
 if (scores["hey_livekit"] ?? 0) > 0.5 { print("Detected!") }
@@ -215,7 +215,7 @@ for await detection in listener.detections() {
 }
 ```
 
-The mel spectrogram and speech embedding `.mlpackage` files are bundled with the Swift package; apps only ship their trained classifier. See [docs/coreml-export.md](docs/coreml-export.md) for how to convert existing ONNX classifiers to Core ML, and for ANE/GPU/CPU benchmarks.
+The mel spectrogram and speech embedding `.onnx` models are bundled with the Swift package; apps only ship their trained classifier (exported via `livekit-wakeword export`). The ONNX Runtime framework is pulled in transitively via the [official Swift Package Manager distribution](https://github.com/microsoft/onnxruntime-swift-package-manager).
 
 A runnable SwiftUI demo (iOS + macOS) lives in [examples/ios_wakeword/](examples/ios_wakeword/) — open `WakewordDemo.xcodeproj`, run the `WakewordDemoMac` scheme, and say "Hey LiveKit".
 

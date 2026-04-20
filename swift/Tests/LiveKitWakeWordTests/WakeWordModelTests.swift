@@ -7,7 +7,6 @@
 //     http://www.apache.org/licenses/LICENSE-2.0
 
 import AVFoundation
-import CoreML
 import Foundation
 import XCTest
 
@@ -15,7 +14,7 @@ import XCTest
 
 /// Mirrors `rust-sdks/livekit-wakeword/tests/integration.rs`: sanity pipeline,
 /// positive-wav-above-threshold, negative-wav-below-threshold. The fixtures
-/// (hey_livekit.mlpackage, positive.wav, negative.wav) are copied from the
+/// (hey_livekit.onnx, positive.wav, negative.wav) are copied from the
 /// Rust crate's `tests/fixtures/` directory.
 final class WakeWordModelTests: XCTestCase {
     private static let threshold: Float = 0.5
@@ -34,11 +33,11 @@ final class WakeWordModelTests: XCTestCase {
     }
 
     func testPredictPipelineShape() throws {
-        let classifier = try fixtureURL("hey_livekit.mlpackage")
+        let classifier = try fixtureURL("hey_livekit.onnx")
         let model = try WakeWordModel(
             classifiers: [classifier],
             sampleRate: 16_000,
-            computeUnits: .cpuOnly
+            executionProvider: .cpu
         )
 
         let sine = Self.generateSine(freq: 440, sampleRate: 16_000, duration: 2.0)
@@ -55,14 +54,14 @@ final class WakeWordModelTests: XCTestCase {
     }
 
     func testPositiveWavAboveThreshold() throws {
-        let classifier = try fixtureURL("hey_livekit.mlpackage")
+        let classifier = try fixtureURL("hey_livekit.onnx")
         let wav = try fixtureURL("positive.wav")
         let (sampleRate, samples) = try Self.readWav(url: wav)
 
         let model = try WakeWordModel(
             classifiers: [classifier],
             sampleRate: sampleRate,
-            computeUnits: .cpuOnly
+            executionProvider: .cpu
         )
 
         let score = try model.predict(samples)["hey_livekit"] ?? 0
@@ -73,14 +72,14 @@ final class WakeWordModelTests: XCTestCase {
     }
 
     func testNegativeWavBelowThreshold() throws {
-        let classifier = try fixtureURL("hey_livekit.mlpackage")
+        let classifier = try fixtureURL("hey_livekit.onnx")
         let wav = try fixtureURL("negative.wav")
         let (sampleRate, samples) = try Self.readWav(url: wav)
 
         let model = try WakeWordModel(
             classifiers: [classifier],
             sampleRate: sampleRate,
-            computeUnits: .cpuOnly
+            executionProvider: .cpu
         )
 
         let score = try model.predict(samples)["hey_livekit"] ?? 0
@@ -91,8 +90,8 @@ final class WakeWordModelTests: XCTestCase {
     }
 
     func testLoadAndUnloadClassifier() throws {
-        let classifier = try fixtureURL("hey_livekit.mlpackage")
-        let model = try WakeWordModel(sampleRate: 16_000, computeUnits: .cpuOnly)
+        let classifier = try fixtureURL("hey_livekit.onnx")
+        let model = try WakeWordModel(sampleRate: 16_000, executionProvider: .cpu)
         XCTAssertEqual(model.classifierNames.count, 0)
 
         try model.loadClassifier(url: classifier, name: "custom")

@@ -7,7 +7,6 @@
 //     http://www.apache.org/licenses/LICENSE-2.0
 
 @preconcurrency import AVFoundation
-import CoreML
 import Foundation
 
 /// A single wake-word trigger, emitted by ``WakeWordListener``.

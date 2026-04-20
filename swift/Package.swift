@@ -5,7 +5,7 @@ let package = Package(
     name: "LiveKitWakeWord",
     platforms: [
         .iOS(.v16),
-        .macOS(.v13),
+        .macOS(.v14),
     ],
     products: [
         .library(
@@ -13,20 +13,22 @@ let package = Package(
             targets: ["LiveKitWakeWord"]
         ),
     ],
-    dependencies: [],
+    dependencies: [
+        .package(
+            url: "https://github.com/microsoft/onnxruntime-swift-package-manager",
+            from: "1.20.0"
+        ),
+    ],
     targets: [
         .target(
             name: "LiveKitWakeWord",
+            dependencies: [
+                .product(name: "onnxruntime", package: "onnxruntime-swift-package-manager"),
+            ],
             path: "Sources/LiveKitWakeWord",
             resources: [
-                // Xcode 15+ is buggy at `.process`-ing .mlpackage directories
-                // from inside a Swift package (it collapses nested
-                // ``Manifest.json`` / ``coremldata.bin`` and produces
-                // duplicate-resource errors). Use ``.copy`` so the whole
-                // package directory is shipped verbatim, and compile it at
-                // first use via ``MLModel.compileModel(at:)``.
-                .copy("Resources/melspectrogram.mlpackage"),
-                .copy("Resources/embedding_model.mlpackage"),
+                .copy("Resources/melspectrogram.onnx"),
+                .copy("Resources/embedding_model.onnx"),
             ]
         ),
         .testTarget(
